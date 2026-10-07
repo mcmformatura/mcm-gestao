@@ -1,7 +1,7 @@
 "use strict";
 /* MCM Gestão: painel de eventos, formandos e produção, com dados e login no Supabase */
-const SUPABASE_URL = "https://qjhfmgsxfijpcbkrahvf.supabase.co";
-const SUPABASE_KEY = "sb_publishable_eVKG7jBafnXqagJ8dNe32A_bABykpNI";   // chave pública; o acesso aos dados é controlado no banco (RLS)
+const SUPABASE_URL = "https://ktibfvbsijtusbhkrlaq.supabase.co";
+const SUPABASE_KEY = "sb_publishable_8kpS_xm27R8z_DNA4iSnWQ_pK92xkRh";   // chave pública; o acesso aos dados é controlado no banco (RLS)
 const HASH_INICIAL = location.hash || "";   // lido antes do Supabase limpar o link de recuperação
 const sb = window.MCM_LOCAL ? window.MCM_LOCAL.client : supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit" },
