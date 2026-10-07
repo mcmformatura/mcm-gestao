@@ -1,5 +1,12 @@
 # Servidor local simples para testar o site: powershell -File servir.ps1  ->  http://localhost:5173
 $raiz = $PSScriptRoot
+# Gera config.js a partir do .env (o mesmo que o build da Vercel faz com as variáveis de ambiente)
+$cfg = @{}
+if (Test-Path "$raiz\.env") {
+  foreach ($linha in Get-Content "$raiz\.env" -Encoding UTF8) { if ($linha -match '^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$') { $cfg[$Matches[1]] = $Matches[2].Trim('"', "'") } }
+}
+$js = 'window.MCM_CONFIG = {"supabaseUrl":"' + $cfg['SUPABASE_URL'] + '","supabaseKey":"' + $cfg['SUPABASE_PUBLISHABLE_KEY'] + '"};'
+[IO.File]::WriteAllText("$raiz\config.js", $js, (New-Object Text.UTF8Encoding $false))
 $l = New-Object System.Net.HttpListener
 $l.Prefixes.Add('http://localhost:5173/')
 $l.Start()

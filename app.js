@@ -1,11 +1,17 @@
 "use strict";
 /* MCM Gestão: painel de eventos, formandos e produção, com dados e login no Supabase */
-const SUPABASE_URL = "https://ktibfvbsijtusbhkrlaq.supabase.co";
-const SUPABASE_KEY = "sb_publishable_8kpS_xm27R8z_DNA4iSnWQ_pK92xkRh";   // chave pública; o acesso aos dados é controlado no banco (RLS)
+// Endereço e chave pública do Supabase vêm do config.js, gerado a partir do .env (local) ou das variáveis de ambiente da Vercel
+const CONFIG = window.MCM_CONFIG || {};
 const HASH_INICIAL = location.hash || "";   // lido antes do Supabase limpar o link de recuperação
-const sb = window.MCM_LOCAL ? window.MCM_LOCAL.client : supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit" },
-});
+function semConfig() {
+  document.getElementById("boot").innerHTML = "<div><b>Configuração ausente.</b> Defina SUPABASE_URL e SUPABASE_PUBLISHABLE_KEY (arquivo .env ou variáveis de ambiente da Vercel) e publique de novo.</div>";
+  throw new Error("MCM_CONFIG ausente");
+}
+const sb = window.MCM_LOCAL ? window.MCM_LOCAL.client
+  : (CONFIG.supabaseUrl && CONFIG.supabaseKey) ? supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit" },
+    })
+  : semConfig();
 
 const EVENTOS = [];          // carregados do banco
 const DATA_OK = /^\d{4}-\d{2}-\d{2}$/;

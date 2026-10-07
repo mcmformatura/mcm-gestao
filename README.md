@@ -35,9 +35,19 @@ Depois abra http://localhost:5173. Opções no endereço:
 - `?reset` volta os dados de teste ao original;
 - `?supabase` usa o Supabase de verdade mesmo em localhost.
 
+## Variáveis de ambiente
+
+| Variável | O que é |
+| --- | --- |
+| `SUPABASE_URL` | Endereço do projeto, ex.: `https://xxxx.supabase.co` |
+| `SUPABASE_PUBLISHABLE_KEY` | Chave **pública** do Supabase (`sb_publishable_...` ou `anon`). Nunca a chave secreta. |
+
+- No computador: copie `.env.example` para `.env` e preencha. O `servir.ps1` gera o `config.js` a partir dele.
+- Na Vercel: cadastre as duas em **Project Settings → Environment Variables**. O build (`node scripts/build.js`) gera `dist/config.js` e recusa publicar se a chave for secreta.
+
 ## Publicar
 
 1. No Supabase: rodar `supabase/001_estrutura.sql`, importar os dados e cadastrar os e-mails da equipe em `membros`.
-2. Em Authentication → URL Configuration: colocar o endereço do site em **Site URL** e em **Redirect URLs**, para o link de recuperação voltar ao site.
-3. Em Authentication → Email Templates → Reset Password: incluir `{{ .Token }}` para o e-mail trazer também o código.
-4. Publicar a pasta na Vercel (projeto estático, sem build).
+2. Na Vercel: **Add New → Project → Import** deste repositório. Framework Preset: **Other**. O `vercel.json` já define o build e a pasta `dist`. Cadastre as variáveis de ambiente antes do primeiro deploy.
+3. No Supabase, em Authentication → URL Configuration: colocar o endereço da Vercel em **Site URL** e em **Redirect URLs**, para o link de recuperação voltar ao site.
+4. Em Authentication → Email Templates → Reset Password: incluir `{{ .Token }}` para o e-mail trazer também o código.

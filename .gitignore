@@ -4,6 +4,15 @@ usuarios-locais.json
 *.sql.local
 seed.sql
 
+# Variáveis de ambiente e arquivos gerados
+.env
+.env.local
+config.js
+dist/
+
+# Configuração local do Claude
+.claude/
+
 # Sistema
 .DS_Store
 Thumbs.db
