@@ -287,6 +287,34 @@ details.rs[open] > summary .car { transform: rotate(90deg); }
   .rs .mini, .rs .v.hide-sm { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .car { transition: none; } }
+
+/* Seletor de mês e grupos de pastas */
+.mesbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.messel { display: inline-flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--muted); }
+.messel select { font: inherit; font-size: 0.9rem; font-weight: 600; padding: 6px 10px; border: 1px solid var(--accent); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.mes-h { font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); font-weight: 700; padding: 10px 10px 2px; }
+.mes-h.off { color: var(--muted); opacity: .6; }
+@media (max-width: 860px) { .mes-h { align-self: center; padding: 0 4px 0 10px; } }
+
+/* Estoque de copos */
+.folder.estoque svg path { fill: var(--violet); }
+.et { min-width: 980px; }
+.et-h { min-width: 640px; }
+.btn.x[data-delmov] { font-size: 0.8rem; }
+.btn.x.bad { color: var(--bad); border-color: var(--bad); font-size: 0.8rem; }
+
+/* Estoque geral */
+.folder.egeral svg path { fill: var(--gold); }
+.eg { min-width: 1000px; }
+.eg td { vertical-align: middle; }
+.eg th .th2 { display: block; font-size: 0.62rem; letter-spacing: 0.04em; text-transform: none; font-weight: 400; }
+.eg input.qty { width: 84px; }
+.eg input.qty.need { border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); }
+.eg td.apedir b { color: var(--warn); font-size: 1rem; font-family: var(--f-data); }
+.eg tr.st-pedir td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+.eg td.forn-c { font-size: 0.82rem; max-width: 220px; }
+.eg .rowmsg { text-align: right; }
+pre.lista { margin: 0; padding: 12px 14px; background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; font-family: var(--f-data); font-size: 0.82rem; white-space: pre-wrap; max-height: 320px; overflow: auto; }
 </style>
 <style>
 /* Entrada: um cartão centralizado sobre o fundo do painel; cada etapa (entrar, recuperar, código, nova senha) é um formulário do mesmo cartão */
@@ -382,7 +410,8 @@ button.link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
 
 <div class="wrap" id="app" hidden>
   <header>
-    <span class="eyebrow">MCM Formatura · Dezembro 2026</span>
+    <div class="mesbar"><span class="eyebrow">MCM Formatura</span>
+      <label class="messel"><span>Período</span><select id="mesSel" aria-label="Mês dos eventos"></select></label></div>
     <div class="headrow">
       <h1>Painel MCM Gestão</h1>
       <div class="quem"><span>Conectado como <b id="quem"></b></span><button class="btn" type="button" data-sair>Sair</button></div>

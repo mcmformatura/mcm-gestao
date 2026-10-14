@@ -62,6 +62,8 @@
       eq(c, v) { filtros.push([c, v]); return q; },
       update(o) { op = "update"; payload = o; return q; },
       upsert(o) { op = "upsert"; payload = o; return q; },
+      insert(o) { op = "insert"; payload = o; return q; },
+      delete() { op = "delete"; return q; },
       then(ok, falha) { return executar().then(ok, falha); },
     };
     async function executar() {
@@ -71,6 +73,8 @@
       if (tabela === "membros") return { data: u.membro ? [{ email: u.email }] : [], error: null };
       if (!u.membro) return { data: [], error: null };            // igual ao RLS: quem não é membro não vê nada
       const db = await banco();
+      // Tabelas de estoque criadas depois da cópia dos dados: começam vazias
+      if (!db[tabela] && ["estoque_movimentos", "copos_config", "estoque_geral"].includes(tabela)) db[tabela] = [];
       const linhas = db[tabela];
       if (!linhas) return { data: null, error: { message: `tabela ${tabela} não existe` } };
       const passa = r => filtros.every(([c, v]) => r[c] === v);
@@ -95,11 +99,23 @@
         return { data: devolver ? alvo.map(r => ({ id: r.id })) : null, error: null };
       }
       if (op === "upsert") {
-        const chave = tabela === "custos" ? "chave" : "id";
+        const chave = ["custos", "copos_config", "estoque_geral"].includes(tabela) ? "chave" : "id";
         const i = linhas.findIndex(r => r[chave] === payload[chave]);
         if (i >= 0) Object.assign(linhas[i], copia(payload)); else linhas.push(copia(payload));
         salvar();
         return { data: null, error: null };
+      }
+      if (op === "insert") {
+        if (linhas.some(r => r.id === payload.id)) return { data: null, error: { message: "duplicate key" } };
+        linhas.push({ ...copia(payload), criado_em: new Date().toISOString() });
+        salvar();
+        return { data: null, error: null };
+      }
+      if (op === "delete") {
+        const fora = linhas.filter(passa);
+        db[tabela] = linhas.filter(r => !passa(r));
+        salvar();
+        return { data: devolver ? fora.map(r => ({ id: r.id })) : null, error: null };
       }
       return { data: null, error: { message: "operação não suportada no modo local" } };
     }

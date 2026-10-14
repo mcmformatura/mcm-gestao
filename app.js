@@ -17,6 +17,16 @@ const EVENTOS = [];          // carregados do banco
 const DATA_OK = /^\d{4}-\d{2}-\d{2}$/;
 const fmtData = d => DATA_OK.test(d || "") ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "";
 
+// Mês dos eventos: o seletor do topo filtra a visão geral, o resumo do mês e o lucro
+const NOMES_MES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+const mesDe = e => (e && e.data && e.data.length >= 10) ? `${e.data.slice(6, 10)}-${e.data.slice(3, 5)}` : "sem-data";
+const rotuloDe = m => m === "todos" ? "Todos os meses" : m === "sem-data" ? "Sem data" : `${NOMES_MES[+m.slice(5, 7) - 1]} ${m.slice(0, 4)}`;
+let MES_SEL = (() => { try { return localStorage.getItem("mcm-mes") || "todos"; } catch (e) { return "todos"; } })();
+const rotuloMes = () => rotuloDe(MES_SEL);
+const mesesDisponiveis = () => [...new Set(EVENTOS.map(mesDe))].sort();
+const EVMes = () => MES_SEL === "todos" ? EVENTOS : EVENTOS.filter(e => mesDe(e) === MES_SEL);
+const FMes = () => { if (MES_SEL === "todos") return F; const ids = new Set(EVMes().map(e => e.id)); return F.filter(f => ids.has(f.ev)); };
+
 const CAT = { PAPELARIA: "Papelaria", LEMBRANCAS: "Lembranças", COPOS: "Copos", DOCES: "Doces", MONTAGEM: "Montagem", LOCACAO: "Locação", OUTROS: "Outros" };
 const CAT_ORDER = ["PAPELARIA", "LEMBRANCAS", "COPOS", "DOCES", "LOCACAO", "MONTAGEM", "OUTROS"];
 const PRODUCAO = new Set(["PAPELARIA", "LEMBRANCAS", "COPOS"]);
@@ -57,6 +67,8 @@ const gridIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H
 const plusIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4h3v6.5H20v3h-6.5V20h-3v-6.5H4v-3h6.5z"/></svg>`;
 const coinIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zm.9 4h-1.8v1.1c-1.5.3-2.5 1.3-2.5 2.6 0 1.6 1.3 2.2 2.9 2.6 1.3.3 1.7.6 1.7 1.1s-.5.9-1.3.9c-.9 0-1.5-.4-1.7-1.1H8.4c.2 1.4 1.2 2.4 2.7 2.7V18h1.8v-1.1c1.6-.3 2.6-1.3 2.6-2.7 0-1.7-1.3-2.3-3-2.7-1.2-.3-1.6-.5-1.6-1s.5-.8 1.2-.8c.7 0 1.2.3 1.4.9h1.8c-.2-1.3-1.1-2.2-2.4-2.5z"/></svg>`;
 const listIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h3v3H4zM9 5.5h11v2H9zM4 10.5h3v3H4zM9 11h11v2H9zM4 16h3v3H4zM9 16.5h11v2H9z"/></svg>`;
+const boxIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 21 7v10l-9 4.5L3 17V7zm0 2.2L6.2 7.6 12 10.5l5.8-2.9zM5 9.2v6.6l6 3V12.2zm14 0-6 3v6.6l6-3z"/></svg>`;
+const cupIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14l-1.6 16.2A2 2 0 0 1 15.4 21H8.6a2 2 0 0 1-2-1.8zm2.2 2 .5 5h8.6l.5-5z"/></svg>`;
 
 
 /* ---------- Estado ---------- */
@@ -94,7 +106,7 @@ async function todos(tabela, colunas, ordem) {
 }
 
 async function carregar() {
-  const [evs, fos, its, pgs, sups, cus, peds] = await Promise.all([
+  const [evs, fos, its, pgs, sups, cus, peds, movs, cfgs, egs] = await Promise.all([
     todos("eventos", "id,nome,data,slug,ordem", ["ordem", "data", "nome"]),
     todos("formandos", "id,evento_id,nome", ["nome", "id"]),
     todos("itens", "id,formando_id,pedido_id,ordem,produto,fornecedor_id,qtd,valor_unit,valor_total,categoria,brinde,obs,status,pedido_em", ["formando_id", "ordem", "id"]),
@@ -102,6 +114,9 @@ async function carregar() {
     todos("fornecedores", "id,nome", ["nome"]),
     todos("custos", "chave,produto,custo,venda", ["chave"]),
     todos("pedidos", "id,formando_id,formando_novo,total,criado_em", ["criado_em"]),
+    todos("estoque_movimentos", "id,modelo,tipo,qtd,data,obs,criado_em", ["data", "criado_em"]),
+    todos("copos_config", "chave,nome,minimo", ["chave"]),
+    todos("estoque_geral", "chave,produto,categoria,qtd,minimo,avulso", ["chave"]),
   ]);
   const n = v => v == null ? null : +v;
 
@@ -113,6 +128,11 @@ async function carregar() {
 
   Object.keys(CUSTOS).forEach(k => { delete CUSTOS[k]; });
   cus.forEach(c => { CUSTOS[c.chave] = { produto: c.produto, custo: n(c.custo), venda: n(c.venda) }; });
+
+  [MOVS, COPOS_CFG, EGERAL].forEach(o => Object.keys(o).forEach(k => { delete o[k]; }));
+  movs.forEach(m => { MOVS[m.id] = { modelo: m.modelo, tipo: m.tipo, qtd: +m.qtd || 0, data: m.data, obs: m.obs || "", em: m.criado_em }; });
+  cfgs.forEach(c => { COPOS_CFG[c.chave] = { nome: c.nome, minimo: n(c.minimo) }; });
+  egs.forEach(e => { EGERAL[e.chave] = { produto: e.produto, cat: e.categoria, qtd: n(e.qtd), minimo: n(e.minimo), custom: !!e.avulso }; });
 
   ITEM = {}; FO_INFO = {};
   const porFo = {}, porPedido = {};
@@ -161,7 +181,7 @@ function connMsg() {
 }
 async function recarregar() {
   setConn("loading", "Atualizando os dados…");
-  try { await carregar(); LIVE = true; connMsg(); renderFolders(); render(); }
+  try { await carregar(); LIVE = true; preencherMeses(); connMsg(); renderFolders(); render(); }
   catch (e) { setConn("error", `<b>Não atualizou.</b> ${esc(erroDb(e))}. <button class="btn" type="button" id="recarregar">Tentar de novo</button>`); document.getElementById("recarregar").addEventListener("click", recarregar); }
 }
 function erroDb(e) {
@@ -239,8 +259,13 @@ function renderFolders() {
   const items = [`<button class="folder overview novo" type="button" data-f="novo" aria-current="${atual === "novo"}">${plusIcon}<span class="fn">Novo pedido<span class="fd">lançar itens por setor</span></span><span class="fc">${Object.values(PEDIDOS).filter(p => !p.sync).length || ""}</span></button>`,
     `<button class="folder overview" type="button" data-f="geral" aria-current="${atual === "geral"}">${gridIcon}<span class="fn">Visão geral<span class="fd">todos os eventos</span></span><span class="fc">${F.length}${tot ? `<span class="w">${tot} a escolher</span>` : ""}</span></button>`,
     `<button class="folder overview lucro" type="button" data-f="lucro" aria-current="${atual === "lucro"}">${coinIcon}<span class="fn">Itens e lucro<span class="fd">venda × custo do fornecedor</span></span><span class="fc"></span></button>`,
-    `<button class="folder overview" type="button" data-f="resumo" aria-current="${atual === "resumo"}">${listIcon}<span class="fn">Resumo do mês<span class="fd">cada item em dezembro</span></span><span class="fc"></span></button>`];
-  EVENTOS.forEach((e, i) => {
+    `<button class="folder overview" type="button" data-f="resumo" aria-current="${atual === "resumo"}">${listIcon}<span class="fn">Resumo do mês<span class="fd">cada item no mês</span></span><span class="fc"></span></button>`,
+    `<button class="folder overview estoque" type="button" data-f="estoque" aria-current="${atual === "estoque"}">${cupIcon}<span class="fn">Estoque de copos<span class="fd">entradas, saídas e o que falta</span></span><span class="fc">${(n => n ? `<span class="w">${n} ${n === 1 ? "alerta" : "alertas"}</span>` : "")(nAlertasEstoque())}</span></button>`,
+    `<button class="folder overview egeral" type="button" data-f="compras" aria-current="${atual === "compras"}">${boxIcon}<span class="fn">Estoque geral<span class="fd">estoque × pedidos: o que pedir</span></span><span class="fc">${(n => n ? `<span class="w">${n} a pedir</span>` : "")(linhasEstoqueGeral().filter(l => l.aPedir > 0).length)}</span></button>`];
+  let mesAnt = null;
+  EVENTOS.slice().sort((a, b) => mesDe(a).localeCompare(mesDe(b))).forEach((e, i) => {
+    const m = mesDe(e);
+    if (m !== mesAnt) { items.push(`<div class="mes-h${MES_SEL !== "todos" && MES_SEL !== m ? " off" : ""}">${esc(rotuloDe(m))}</div>`); mesAnt = m; }
     const l = byEv(e.id), w = sum(l, "nEscolher");
     items.push(`<button class="folder${i === 0 ? " sep" : ""}" type="button" data-f="${e.slug}" aria-current="${atual === e.slug}">${folderIcon}<span class="fn">${esc(e.nome)}<span class="fd">${e.data.slice(0, 5)} · ${l.length} formando${l.length > 1 ? "s" : ""}</span></span><span class="fc">${w ? `<span class="w">${w} a escolher</span>` : ""}</span></button>`);
   });
@@ -402,11 +427,11 @@ function rerender(itemId, kind, text) {
 function refreshResumo() {
   if (atual === "resumo") { renderFolders(); return; }
   if (atual === "novo") { renderFolders(); renderNovoLista(); return; }
-  if (atual === "lucro") { renderFolders(); return; }
+  if (atual === "lucro" || atual === "estoque" || atual === "compras") { renderFolders(); return; }
   const k = document.querySelector(".kpis");
   const evAtual = EVENTOS.find(x => x.slug === atual);
   if (k && (atual === "geral" || evAtual)) {
-    const lista = atual === "geral" ? F : byEv(evAtual.id);
+    const lista = atual === "geral" ? FMes() : byEv(evAtual.id);
     k.outerHTML = kpis(lista);
     const st = document.getElementById("stpanel");
     if (st) st.innerHTML = statusResumo(lista);
@@ -442,10 +467,12 @@ function render() {
   if (atual === "resumo") { renderResumo(); return; }
   if (atual === "novo") { renderNovo(); return; }
   if (atual === "lucro") { renderLucro(); return; }
+  if (atual === "estoque") { renderEstoque(); return; }
+  if (atual === "compras") { renderEstoqueGeral(); return; }
   if (atual !== "geral" && !EVENTOS.some(x => x.slug === atual)) atual = "geral";
   if (atual === "geral") {
     const grupos = {};
-    allItens(F).filter(i => i.escolher).forEach(i => {
+    allItens(FMes()).filter(i => i.escolher).forEach(i => {
       const p = i.produto.toLowerCase();
       const g = /identidade visual|id visual|^id$|taxa.*(id|papelaria|arte)|vetoriza/.test(p) ? "Arte / ID visual"
         : /guardanapo/.test(p) ? "Guardanapos" : /necessaire|ncessaire|mini hel/.test(p) ? "Necessaires"
@@ -456,9 +483,9 @@ function render() {
     const esq = Object.entries(grupos).sort((a, b) => b[1] - a[1]);
     const maxE = Math.max(1, ...esq.map(x => x[1]));
     main.innerHTML = `
-      <div class="evhead"><span class="eyebrow">Visão geral</span><h2>Todos os eventos de dezembro</h2></div>
-      ${kpis(F)}
-      <div class="evcards">${EVENTOS.map(e => {
+      <div class="evhead"><span class="eyebrow">Visão geral · ${esc(rotuloMes())}</span><h2>${MES_SEL === "todos" ? "Todos os eventos" : "Eventos de " + esc(rotuloMes().toLowerCase())}</h2></div>
+      ${kpis(FMes())}
+      <div class="evcards">${EVMes().map(e => {
         const l = byEv(e.id), d = sum(l, "devido"), p = sum(l, "pago"), w = sum(l, "nEscolher");
         return `<button class="evcard" type="button" data-f="${e.slug}">
           <span class="meta"><span class="nm">${esc(e.nome)}</span><span class="dt">${e.data.slice(0, 5)}</span></span>
@@ -468,7 +495,7 @@ function render() {
         </button>`;
       }).join("")}</div>
       <div class="two">
-        <div id="stpanel">${statusResumo(F)}</div>
+        <div id="stpanel">${statusResumo(FMes())}</div>
         <div class="panel"><h3>Fornecedor a escolher</h3>
           <div class="rows">${esq.length ? esq.map(([g, n]) => `<div class="row"><span class="lab">${g}</span><span class="val">${n} itens</span><div class="bar" aria-hidden="true"><i style="width:${(n / maxE * 100).toFixed(1)}%"></i></div></div>`).join("") : `<p class="hint">Todos os itens de produção já têm fornecedor.</p>`}</div></div>
       </div>
@@ -790,7 +817,7 @@ function linhasLucro() {
 function renderLucro() {
   const main = document.getElementById("main");
   main.innerHTML = `
-    <div class="evhead"><span class="eyebrow">Itens e lucro · dezembro 2026</span><h2>Quanto ganhamos em cada item</h2>
+    <div class="evhead"><span class="eyebrow">Itens e lucro · ${esc(rotuloMes())}</span><h2>Quanto ganhamos em cada item</h2>
       <p class="hint">Preencha o <b>custo do fornecedor</b> por unidade (e, se quiser, o preço de venda de tabela). A receita vem do que foi vendido nos orçamentos do mês; o custo conta todas as unidades, inclusive as dadas de brinde.</p></div>
     ${LIVE ? "" : `<div class="callout ro">Somente leitura: os valores não podem ser editados nesta visualização. Veja o motivo na faixa do topo.</div>`}
     <div id="lkpis"></div>
@@ -884,6 +911,382 @@ function renderLucro() {
   draw();
 }
 
+/* ---------- Estoque de copos: entradas e saídas × o que os pedidos do mês pedem ---------- */
+const MOVS = {};            // id -> { modelo, tipo: ENTRADA|SAIDA, qtd, data, obs, em }
+const COPOS_CFG = {};       // chave do modelo -> { nome, minimo, em }
+const EHCOPO = /^(taça|taca|copo)\b/i;
+const A_PRODUZIR = new Set(["AGUARDANDO_PRODUCAO", "REPASSADO"]);
+const hojeISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+
+function linhasEstoque() {
+  const L = {};
+  const get = nome => L[chaveProduto(nome)] = L[chaveProduto(nome)] || { nome, k: chaveProduto(nome), pedidos: 0, aProduzir: 0, entradas: 0, saidas: 0, formandos: new Set() };
+  agruparMes(F).filter(g => EHCOPO.test(g.nome)).forEach(g => {
+    const l = get(g.nome);
+    l.pedidos = g.qtd;
+    l.aProduzir = g.itens.filter(i => A_PRODUZIR.has(i.status)).reduce((a, i) => a + (i.qtd || 0), 0);
+    l.formandos = g.formandos;
+  });
+  Object.values(COPOS_CFG).forEach(c => { if (c && c.nome) get(c.nome); });
+  Object.values(MOVS).forEach(m => {
+    if (!m || !m.modelo) return;
+    const l = get(m.modelo);
+    if (m.tipo === "ENTRADA") l.entradas += +m.qtd || 0; else if (m.tipo === "SAIDA") l.saidas += +m.qtd || 0;
+  });
+  return Object.values(L).map(l => {
+    const c = COPOS_CFG[l.k] || {};
+    const minimo = c.minimo == null || c.minimo === "" ? null : +c.minimo;
+    const estoque = l.entradas - l.saidas;
+    const falta = Math.max(0, l.aProduzir - estoque);
+    const sobra = estoque - l.aProduzir;
+    const sit = falta > 0 ? (estoque <= 0 ? ["bad", "Sem estoque"] : ["warn", `Faltam ${int(falta)}`])
+      : minimo != null && sobra < minimo ? ["warn", "Abaixo do mínimo"]
+      : estoque > 0 || l.aProduzir > 0 ? ["ok", "Em dia"] : ["", "Sem movimento"];
+    return { ...l, minimo, estoque, falta, sobra, sit };
+  }).sort((a, b) => b.falta - a.falta || b.aProduzir - a.aProduzir || a.nome.localeCompare(b.nome, "pt-BR"));
+}
+const nAlertasEstoque = () => linhasEstoque().filter(l => l.sit[0] === "bad" || l.sit[0] === "warn").length;
+
+function renderEstoque() {
+  const main = document.getElementById("main");
+  const dis = LIVE ? "" : " disabled";
+  main.innerHTML = `
+    <div class="evhead"><span class="eyebrow">Estoque de copos</span><h2>Copos e taças em estoque</h2>
+      <p class="hint">Registre as <b>entradas</b> (compras recebidas) e as <b>saídas</b> (copos usados na produção, quebrados ou separados). O painel compara o estoque com os copos dos pedidos (todos os meses) que ainda estão aguardando produção ou foram repassados, e mostra quanto falta comprar.</p></div>
+    ${LIVE ? "" : `<div class="callout ro">Somente leitura: as movimentações não podem ser registradas nesta visualização. Veja o motivo na faixa do topo.</div>`}
+    <div id="ekpis"></div>
+    <form class="panel np" id="emov" novalidate>
+      <h3>Registrar movimentação</h3>
+      <div class="two np-head" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">
+        <div class="field"><label for="emod">Modelo</label><select id="emod"${dis}></select>
+          <input id="enovo" type="text" maxlength="80" placeholder="Nome do novo modelo" aria-label="Nome do novo modelo" hidden${dis}></div>
+        <div class="field"><label for="etipo">Tipo</label><select id="etipo"${dis}><option value="ENTRADA">Entrada · compra recebida</option><option value="SAIDA">Saída · usado, quebrado ou separado</option></select></div>
+        <div class="field"><label for="eqtd">Quantidade</label><input id="eqtd" type="number" min="1" step="1" inputmode="numeric" placeholder="0"${dis}></div>
+        <div class="field"><label for="edata">Data</label><input id="edata" type="date" value="${hojeISO()}"${dis}></div>
+        <div class="field"><label for="eobs">Observação</label><input id="eobs" type="text" maxlength="140" placeholder="fornecedor, nota, evento…"${dis}></div>
+      </div>
+      <div class="np-actions" style="justify-content:flex-start;align-items:center"><button class="btn primary" type="submit" id="esalvar"${dis}>Registrar</button><p class="np-msg" id="emsg" role="status"></p></div>
+    </form>
+    <div class="tools">
+      <input id="eq" type="search" placeholder="Buscar modelo" aria-label="Buscar modelo">
+      <select id="esit" aria-label="Situação"><option value="">Todos os modelos</option><option value="alerta">Faltando ou abaixo do mínimo</option><option value="estoque">Com estoque</option></select>
+    </div>
+    <div class="tablebox"><table class="lt et">
+      <thead><tr><th>Modelo</th><th class="r">Em estoque</th><th class="r">Pedidos do mês<span class="th2">todas as unidades</span></th><th class="r">A produzir<span class="th2">aguardando / repassado</span></th><th class="r">Falta comprar</th><th class="r">Sobra após produzir</th><th class="r">Estoque mínimo<span class="th2">alerta abaixo disso</span></th><th>Situação</th></tr></thead>
+      <tbody id="erows"></tbody>
+    </table></div>
+    <div class="panel"><h3>Últimas movimentações</h3><div id="ehist"></div></div>`;
+
+  const sel = document.getElementById("emod"), novo = document.getElementById("enovo");
+  const q = document.getElementById("eq"), fs = document.getElementById("esit"), body = document.getElementById("erows");
+
+  const fillModelos = () => {
+    const atualV = sel.value;
+    const nomes = linhasEstoque().map(l => l.nome).sort((a, b) => a.localeCompare(b, "pt-BR"));
+    sel.innerHTML = nomes.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("") + `<option value="__novo">Outro modelo…</option>`;
+    if (atualV && [...sel.options].some(o => o.value === atualV)) sel.value = atualV;
+    novo.hidden = sel.value !== "__novo";
+  };
+  sel.addEventListener("change", () => { novo.hidden = sel.value !== "__novo"; if (!novo.hidden) novo.focus(); });
+
+  const draw = () => {
+    const ls = linhasEstoque();
+    const tot = ls.reduce((a, l) => a + Math.max(0, l.estoque), 0), prod = ls.reduce((a, l) => a + l.aProduzir, 0);
+    const falta = ls.filter(l => l.falta > 0), alertas = ls.filter(l => l.sit[0] === "bad" || l.sit[0] === "warn");
+    document.getElementById("ekpis").innerHTML = `<div class="kpis">
+      <div class="kpi"><span class="eyebrow">Em estoque</span><span class="v">${int(tot)}</span><span class="s">copos e taças, ${ls.filter(l => l.estoque > 0).length} modelos</span></div>
+      <div class="kpi"><span class="eyebrow">A produzir</span><span class="v">${int(prod)}</span><span class="s">unidades nos pedidos</span></div>
+      <div class="kpi hl"><span class="eyebrow">Falta comprar</span><span class="v">${int(falta.reduce((a, l) => a + l.falta, 0))}</span><span class="s">${falta.length} ${falta.length === 1 ? "modelo" : "modelos"}</span></div>
+      <div class="kpi"><span class="eyebrow">Alertas</span><span class="v">${alertas.length}</span><span class="s">faltando ou abaixo do mínimo</span></div>
+    </div>`;
+    const termo = semAcento(q.value);
+    const r = ls.filter(l => (!termo || semAcento(l.nome).includes(termo))
+      && (fs.value !== "alerta" || l.sit[0] === "bad" || l.sit[0] === "warn") && (fs.value !== "estoque" || l.estoque > 0));
+    body.innerHTML = r.length ? r.map(l => `<tr data-k="${esc(l.k)}">
+      <td class="fo-n">${esc(l.nome)}<span class="sub">${l.formandos.size ? `${l.formandos.size} formando${l.formandos.size > 1 ? "s" : ""} · ` : ""}${int(l.entradas)} entraram · ${int(l.saidas)} saíram</span></td>
+      <td class="r num"><b>${int(l.estoque)}</b></td>
+      <td class="r num muted">${int(l.pedidos)}</td>
+      <td class="r num">${int(l.aProduzir)}</td>
+      <td class="r num ${l.falta ? "neg" : "muted"}">${l.falta ? int(l.falta) : "—"}</td>
+      <td class="r num ${l.sobra < 0 ? "neg" : ""}">${int(l.sobra)}</td>
+      <td class="r"><input class="np-in r money" data-min data-nome="${esc(l.nome)}" type="number" min="0" step="1" inputmode="numeric" value="${l.minimo ?? ""}" placeholder="—" aria-label="Estoque mínimo de ${esc(l.nome)}"${dis}><span class="rowmsg" data-msg></span></td>
+      <td>${l.sit[0] ? `<span class="chip ${l.sit[0]}">${l.sit[1]}</span>` : `<span class="muted">${l.sit[1]}</span>`}</td>
+    </tr>`).join("") : `<tr><td colspan="8" class="muted">Nenhum modelo com esse filtro.</td></tr>`;
+
+    const ms = Object.entries(MOVS).filter(([, m]) => m && m.modelo)
+      .sort((a, b) => String(b[1].data).localeCompare(String(a[1].data)) || String(b[1].em).localeCompare(String(a[1].em))).slice(0, 40);
+    document.getElementById("ehist").innerHTML = ms.length ? `<div class="tablebox"><table class="et-h"><thead><tr><th>Data</th><th>Modelo</th><th>Tipo</th><th class="r">Qtd</th><th>Observação</th><th></th></tr></thead><tbody>${ms.map(([id, m]) => `<tr>
+        <td class="num muted">${fmtData(m.data) || "—"}</td><td>${esc(m.modelo)}</td>
+        <td>${m.tipo === "ENTRADA" ? `<span class="chip ok">Entrada</span>` : `<span class="chip warn">Saída</span>`}</td>
+        <td class="r num">${m.tipo === "ENTRADA" ? "+" : "−"}${int(+m.qtd || 0)}</td>
+        <td class="obs">${esc(m.obs || "")}</td>
+        <td class="r"><button class="btn x" type="button" data-delmov="${esc(id)}" aria-label="Apagar movimentação"${dis}>Apagar</button></td>
+      </tr>`).join("")}</tbody></table></div>`
+      : `<p class="hint">Nenhuma movimentação ainda. Comece registrando a contagem atual de cada modelo como uma entrada.</p>`;
+  };
+  q.addEventListener("input", draw);
+  fs.addEventListener("change", draw);
+
+  body.addEventListener("change", async e => {
+    const inp = e.target.closest("input[data-min]");
+    if (!inp || !LIVE) return;
+    const nome = inp.dataset.nome, k = chaveProduto(nome);
+    const v = inp.value.trim() === "" ? null : Math.round(num(inp.value));
+    if (v != null && (!isFinite(v) || v < 0)) return;
+    const msg = inp.parentElement.querySelector("[data-msg]");
+    inp.disabled = true;
+    try {
+      const doc = { nome, minimo: v, em: new Date().toISOString() };
+      const { error } = await sb.from("copos_config").upsert({ chave: k, nome, minimo: v, atualizado_em: doc.em });
+      if (error) throw error;
+      COPOS_CFG[k] = doc;
+      draw();
+      const m = body.querySelector(`tr[data-k="${CSS.escape(k)}"] [data-msg]`);
+      if (m) { m.className = "rowmsg ok"; m.textContent = "salvo"; }
+      renderFolders();
+    } catch (err) { inp.disabled = false; if (msg) { msg.className = "rowmsg err"; msg.textContent = erroDb(err); } }
+  });
+
+  document.getElementById("ehist").addEventListener("click", async e => {
+    const b = e.target.closest("[data-delmov]");
+    if (!b || !LIVE) return;
+    if (b.dataset.conf !== "1") { b.dataset.conf = "1"; b.textContent = "Confirmar"; b.classList.add("bad"); return; }
+    b.disabled = true;
+    try {
+      const { data, error } = await sb.from("estoque_movimentos").delete().eq("id", b.dataset.delmov).select("id");
+      if (error) throw error;
+      if (!data || !data.length) throw new Error("nada foi salvo");
+      delete MOVS[b.dataset.delmov]; draw(); renderFolders();
+    }
+    catch (err) { b.disabled = false; b.textContent = erroDb(err); }
+  });
+
+  document.getElementById("emov").addEventListener("submit", async e => {
+    e.preventDefault();
+    if (!LIVE) return;
+    const msg = document.getElementById("emsg");
+    const modelo = (sel.value === "__novo" ? novo.value : sel.value).trim().replace(/\s+/g, " ");
+    const tipo = document.getElementById("etipo").value;
+    const qtd = Math.round(num(document.getElementById("eqtd").value) ?? 0);
+    const data = document.getElementById("edata").value;
+    const obs = document.getElementById("eobs").value.trim();
+    const erro = t => { msg.className = "np-msg err"; msg.textContent = t; };
+    if (!modelo) return erro("Escolha o modelo ou digite o nome do novo modelo.");
+    if (!(qtd > 0)) return erro("Informe uma quantidade maior que zero.");
+    if (!DATA_OK.test(data)) return erro("Informe a data da movimentação.");
+    if (tipo === "SAIDA") {
+      const l = linhasEstoque().find(x => x.k === chaveProduto(modelo));
+      const tem = l ? l.estoque : 0;
+      if (qtd > tem) return erro(`Só há ${int(Math.max(0, tem))} em estoque de ${modelo}. Registre a entrada antes da saída.`);
+    }
+    const id = "m" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    const doc = { modelo, tipo, qtd, data, obs, em: new Date().toISOString() };
+    const btn = document.getElementById("esalvar");
+    btn.disabled = true; msg.className = "np-msg"; msg.textContent = "Salvando…";
+    try {
+      const { error } = await sb.from("estoque_movimentos").insert({ id, modelo, tipo, qtd, data, obs: obs || null });
+      if (error) throw error;
+      MOVS[id] = doc;
+      fillModelos();
+      const nm = (linhasEstoque().find(l => l.k === chaveProduto(modelo)) || {}).nome;
+      if (nm) sel.value = nm;
+      novo.hidden = sel.value !== "__novo"; novo.value = "";
+      document.getElementById("eqtd").value = ""; document.getElementById("eobs").value = "";
+      draw(); renderFolders();
+      msg.className = "np-msg ok"; msg.textContent = `${tipo === "ENTRADA" ? "Entrada" : "Saída"} de ${int(qtd)} ${modelo} registrada.`;
+    } catch (err) { erro(erroDb(err)); }
+    btn.disabled = !LIVE;
+  });
+
+  fillModelos();
+  draw();
+}
+
+/* ---------- Estoque geral: estoque × itens dos pedidos = o que falta pedir ---------- */
+const EGERAL = {};         // chave do produto -> { produto, cat, qtd, minimo, custom, em }
+const CONSUMIDO = new Set(["PRONTO", "ENTREGUE"]);   // já separado / entregue: saiu da conta do estoque
+
+function linhasEstoqueGeral() {
+  const grupos = agruparMes(F);
+  const vistos = new Set();
+  // Copos e taças têm o estoque controlado por entradas e saídas na pasta "Estoque de copos"
+  const copos = {};
+  try { linhasEstoque().forEach(c => { copos[c.k] = c; }); } catch (err) {}
+  const ls = grupos.map(g => {
+    const k = chaveProduto(g.nome); vistos.add(k);
+    let e = EGERAL[k] || {};
+    if (EHCOPO.test(g.nome)) {
+      const c = copos[k], temMov = c && (c.entradas || c.saidas);
+      e = { qtd: temMov ? c.estoque : null, minimo: c && c.minimo != null ? c.minimo : null, deCopos: true };
+    }
+    const usados = g.itens.filter(i => CONSUMIDO.has(i.status));
+    const pend = g.itens.filter(i => !CONSUMIDO.has(i.status));
+    const pedidos = pend.filter(i => i.pedido || i.status === "REPASSADO" || i.status === "EM_PRODUCAO");
+    const semPed = pend.filter(i => !pedidos.includes(i));
+    const q = l => l.reduce((a, i) => a + (i.qtd || 0), 0);
+    const forn = {};
+    semPed.forEach(i => { const n = i.fornId ? SUP[i.fornId] : "Fornecedor a definir"; forn[n] = (forn[n] || 0) + (i.qtd || 0); });
+    return mkLinhaEg(k, g.nome, g.cat, e, q(usados), q(pend), q(pedidos), q(semPed), forn);
+  });
+  Object.entries(EGERAL).forEach(([k, e]) => { if (!vistos.has(k)) ls.push(mkLinhaEg(k, e.produto || k, CAT[e.cat] ? e.cat : "OUTROS", e, 0, 0, 0, 0, {})); });
+  return ls;
+}
+function mkLinhaEg(k, nome, cat, e, usado, pendente, jaPedido, semPedido, forn) {
+  const estoque = e.qtd == null || e.qtd === "" ? null : +e.qtd;
+  const minimo = e.minimo == null || e.minimo === "" ? 0 : +e.minimo;
+  const precisa = semPedido + minimo;                       // o que ainda não tem pedido + reserva mínima
+  const aPedir = estoque == null ? null : Math.max(0, precisa - estoque);
+  const sobra = estoque == null ? null : Math.max(0, estoque - precisa);
+  const principal = Object.entries(forn).sort((a, b) => b[1] - a[1])[0];
+  return { k, nome, cat, estoque, minimo, usado, pendente, jaPedido, semPedido, aPedir, sobra, forn, fornPrincipal: principal ? principal[0] : "Fornecedor a definir", custom: !!e.custom, deCopos: !!e.deCopos };
+}
+
+function textoListaCompras(ls) {
+  const porForn = {};
+  ls.filter(l => l.aPedir > 0).forEach(l => { (porForn[l.fornPrincipal] = porForn[l.fornPrincipal] || []).push(l); });
+  const hoje = new Date().toLocaleDateString("pt-BR");
+  return Object.entries(porForn).sort((a, b) => a[0].localeCompare(b[0], "pt-BR")).map(([f, l]) =>
+    `${f}\n` + l.map(x => `- ${x.nome}: ${x.aPedir} un.`).join("\n")).join("\n\n")
+    .replace(/^/, `Lista de compras MCM · ${hoje}\n\n`);
+}
+
+function renderEstoqueGeral() {
+  const main = document.getElementById("main");
+  const dis = LIVE ? "" : " disabled";
+  main.innerHTML = `
+    <div class="evhead"><span class="eyebrow">Estoque geral</span><h2>Estoque × itens dos pedidos</h2>
+      <p class="hint">Informe quanto tem <b>em estoque</b> de cada produto. O painel compara com o que os pedidos ainda precisam (itens que não estão prontos nem entregues), desconta o que já foi pedido ao fornecedor e mostra o que <b>falta pedir</b>. Itens marcados como Pronto ou Entregue contam como já utilizados. Copos e taças usam o estoque registrado na pasta <b>Estoque de copos</b>.</p></div>
+    ${LIVE ? "" : `<div class="callout ro">Somente leitura: o estoque não pode ser editado nesta visualização. Veja o motivo na faixa do topo.</div>`}
+    <div id="gkpis"></div>
+    <div class="tools">
+      <input id="gq" type="search" placeholder="Buscar produto" aria-label="Buscar produto">
+      <select id="gcat" aria-label="Categoria"><option value="">Todas as categorias</option>${CAT_ORDER.map(c => `<option value="${c}">${CAT[c]}</option>`).join("")}</select>
+      <select id="gsit" aria-label="Situação"><option value="">Todos os produtos</option><option value="pedir">Falta pedir</option><option value="ok">Estoque cobre</option><option value="sem">Sem estoque informado</option><option value="pend">Com itens pendentes</option></select>
+      <select id="gord" aria-label="Ordenar"><option value="pedir">Mais urgente (falta pedir)</option><option value="pend">Mais pendentes</option><option value="nome">Nome</option></select>
+    </div>
+    <div class="tablebox"><table class="eg">
+      <thead><tr><th>Produto</th><th class="r">Já utilizado<span class="th2">pronto / entregue</span></th><th class="r">Pendente<span class="th2">nos pedidos</span></th><th class="r">Já pedido<span class="th2">ao fornecedor</span></th><th class="r">Em estoque</th><th class="r">Estoque mínimo<span class="th2">reserva</span></th><th class="r">Falta pedir</th><th>Pedir a</th></tr></thead>
+      <tbody id="grows"></tbody>
+    </table></div>
+    <div class="two">
+      <div class="panel"><div class="np-sh"><h3>Lista de compras</h3><button type="button" class="btn" id="gcopy">Copiar lista</button></div>
+        <p class="hint">O que falta pedir, separado pelo fornecedor mais usado em cada produto. Copie e mande para os fornecedores.</p>
+        <pre class="lista" id="glista"></pre><span class="rowmsg" id="gcopymsg" role="status"></span></div>
+      <div class="panel"><h3>Adicionar item ao estoque</h3>
+        <p class="hint">Para materiais que não aparecem nos pedidos (ex.: filme DTF, fita, embalagens).</p>
+        <form id="gadd" class="np-head" novalidate>
+          <div class="field"><label for="gaddnome">Produto</label><input id="gaddnome" placeholder="Nome do material"${dis}></div>
+          <div class="field"><label for="gaddcat">Categoria</label><select id="gaddcat"${dis}>${CAT_ORDER.map(c => `<option value="${c}">${CAT[c]}</option>`).join("")}</select></div>
+          <div class="field"><label for="gaddqtd">Em estoque</label><input id="gaddqtd" type="number" min="0" step="1"${dis}></div>
+          <div class="field"><label for="gaddmin">Estoque mínimo</label><input id="gaddmin" type="number" min="0" step="1"${dis}></div>
+          <div><button class="btn primary" type="submit"${dis}>Adicionar</button> <span class="rowmsg" id="gaddmsg" role="status"></span></div>
+        </form></div>
+    </div>`;
+
+  const gq = document.getElementById("gq"), gcat = document.getElementById("gcat"), gsit = document.getElementById("gsit"), gord = document.getElementById("gord");
+  const body = document.getElementById("grows");
+  body.addEventListener("click", e => { if (e.target.closest("[data-ircopos]")) abrir("estoque"); });
+
+  const linha = l => {
+    const st = l.estoque == null ? "sem" : l.aPedir > 0 ? "pedir" : "ok";
+    const fornTxt = Object.entries(l.forn).sort((a, b) => b[1] - a[1]).map(([n, q]) => `${n} ${int(q)}`).join(" · ");
+    return `<tr data-k="${esc(l.k)}" class="st-${st}">
+      <td class="fo-n">${esc(l.nome)}${l.custom ? `<span class="sub">item de estoque (fora dos pedidos)</span>` : l.deCopos ? `<span class="sub">estoque controlado na pasta Estoque de copos</span>` : ""}</td>
+      <td class="r num muted">${int(l.usado)}</td>
+      <td class="r num">${int(l.pendente)}</td>
+      <td class="r num">${l.jaPedido ? int(l.jaPedido) : `<span class="muted">0</span>`}</td>
+      ${l.deCopos
+        ? `<td class="r num">${l.estoque == null ? `<button type="button" class="btn x" data-ircopos>registrar entrada</button>` : int(l.estoque)}</td>
+           <td class="r num muted">${l.minimo ? int(l.minimo) : "—"}</td>`
+        : `<td class="r"><input class="np-in r qty${l.estoque == null ? " need" : ""}" data-campo="qtd" data-nome="${esc(l.nome)}" data-cat="${esc(l.cat)}" type="number" min="0" step="1" inputmode="numeric" value="${l.estoque == null ? "" : l.estoque}" placeholder="qtd" aria-label="Estoque de ${esc(l.nome)}"${dis}><span class="rowmsg" data-msg></span></td>
+           <td class="r"><input class="np-in r qty" data-campo="minimo" data-nome="${esc(l.nome)}" data-cat="${esc(l.cat)}" type="number" min="0" step="1" inputmode="numeric" value="${l.minimo || ""}" placeholder="0" aria-label="Estoque mínimo de ${esc(l.nome)}"${dis}></td>`}
+      <td class="r num apedir">${l.estoque == null ? `<span class="muted">${l.deCopos ? "sem movimentação" : "informe o estoque"}</span>` : l.aPedir > 0 ? `<b>${int(l.aPedir)}</b>` : `<span class="chip ok">ok${l.sobra ? ` · sobram ${int(l.sobra)}` : ""}</span>`}</td>
+      <td class="forn-c" title="${esc(fornTxt)}">${l.aPedir > 0 ? esc(l.fornPrincipal) : `<span class="muted">${esc(fornTxt || "—")}</span>`}</td>
+    </tr>`;
+  };
+
+  const draw = () => {
+    const todas = linhasEstoqueGeral();
+    const pedir = todas.filter(l => l.aPedir > 0), sem = todas.filter(l => l.estoque == null && l.pendente > 0);
+    document.getElementById("gkpis").innerHTML = `<div class="kpis">
+      <div class="kpi hl"><span class="eyebrow">Falta pedir</span><span class="v">${pedir.length} produtos</span><span class="s">${int(pedir.reduce((a, l) => a + l.aPedir, 0))} unidades</span></div>
+      <div class="kpi"><span class="eyebrow">Pendente nos pedidos</span><span class="v">${int(todas.reduce((a, l) => a + l.pendente, 0))} un.</span><span class="s">ainda não prontos nem entregues</span></div>
+      <div class="kpi"><span class="eyebrow">Já pedido ao fornecedor</span><span class="v">${int(todas.reduce((a, l) => a + l.jaPedido, 0))} un.</span><span class="s">com data de pedido ou repassado</span></div>
+      <div class="kpi"><span class="eyebrow">Sem estoque informado</span><span class="v">${sem.length}</span><span class="s">produtos com itens pendentes</span></div>
+    </div>`;
+    document.getElementById("glista").textContent = pedir.length ? textoListaCompras(todas) : "Nada para pedir no momento (ou falta informar o estoque).";
+    const termo = semAcento(gq.value);
+    let ls = todas.filter(l => (!termo || semAcento(l.nome).includes(termo)) && (!gcat.value || l.cat === gcat.value)
+      && (gsit.value !== "pedir" || l.aPedir > 0) && (gsit.value !== "ok" || (l.estoque != null && l.aPedir === 0))
+      && (gsit.value !== "sem" || l.estoque == null) && (gsit.value !== "pend" || l.pendente > 0));
+    const o = gord.value;
+    ls.sort((a, b) => o === "nome" ? a.nome.localeCompare(b.nome, "pt-BR") : o === "pend" ? b.pendente - a.pendente
+      : ((b.aPedir ?? -1) - (a.aPedir ?? -1)) || (b.semPedido - a.semPedido));
+    const out = [];
+    CAT_ORDER.forEach(c => {
+      const g = ls.filter(l => l.cat === c);
+      if (!g.length) return;
+      out.push(`<tr class="grp"><td colspan="6">${CAT[c]} · ${g.length} produtos</td><td class="r num">${int(g.reduce((a, l) => a + (l.aPedir || 0), 0))}</td><td></td></tr>`);
+      g.forEach(l => out.push(linha(l)));
+    });
+    body.innerHTML = out.length ? out.join("") : `<tr><td colspan="8" class="muted">Nenhum produto com esses filtros.</td></tr>`;
+  };
+  [gq, gcat, gsit, gord].forEach(el => el.addEventListener(el === gq ? "input" : "change", draw));
+
+  const salvarEst = async (nome, cat, patch, custom) => {
+    const k = chaveProduto(nome);
+    const a = EGERAL[k] || {};
+    const doc = { produto: nome, cat, qtd: a.qtd ?? null, minimo: a.minimo ?? null, custom: custom ?? !!a.custom, em: new Date().toISOString(), ...patch };
+    const { error } = await sb.from("estoque_geral").upsert({ chave: k, produto: nome, categoria: CAT[cat] ? cat : "OUTROS", qtd: doc.qtd, minimo: doc.minimo, avulso: doc.custom, atualizado_em: doc.em });
+    if (error) throw error;
+    EGERAL[k] = doc;
+    return k;
+  };
+
+  body.addEventListener("change", async e => {
+    const inp = e.target.closest("input[data-campo]");
+    if (!inp || !LIVE) return;
+    const v = inp.value.trim() === "" ? null : Math.round(num(inp.value));
+    if (v != null && (!isFinite(v) || v < 0)) return;
+    inp.disabled = true;
+    try {
+      const k = await salvarEst(inp.dataset.nome, inp.dataset.cat, { [inp.dataset.campo]: v });
+      draw();
+      const m = body.querySelector(`tr[data-k="${CSS.escape(k)}"] [data-msg]`);
+      if (m) { m.className = "rowmsg ok"; m.textContent = "salvo"; }
+    } catch (err) {
+      inp.disabled = false;
+      const m = inp.closest("tr").querySelector("[data-msg]");
+      if (m) { m.className = "rowmsg err"; m.textContent = erroDb(err); }
+    }
+  });
+
+  document.getElementById("gadd").addEventListener("submit", async e => {
+    e.preventDefault();
+    const msg = document.getElementById("gaddmsg");
+    const nome = document.getElementById("gaddnome").value.trim();
+    if (!nome) { msg.className = "rowmsg err"; msg.textContent = "Digite o nome do produto."; return; }
+    const q = num(document.getElementById("gaddqtd").value), m = num(document.getElementById("gaddmin").value);
+    try {
+      await salvarEst(nome, document.getElementById("gaddcat").value, { qtd: q == null ? null : Math.round(q), minimo: m == null ? null : Math.round(m) }, true);
+      ["gaddnome", "gaddqtd", "gaddmin"].forEach(id => { document.getElementById(id).value = ""; });
+      msg.className = "rowmsg ok"; msg.textContent = `${nome} adicionado.`;
+      draw();
+    } catch (err) { msg.className = "rowmsg err"; msg.textContent = erroDb(err); }
+  });
+
+  document.getElementById("gcopy").addEventListener("click", async () => {
+    const txt = document.getElementById("glista").textContent, m = document.getElementById("gcopymsg");
+    try { await navigator.clipboard.writeText(txt); m.className = "rowmsg ok"; m.textContent = "Lista copiada."; }
+    catch (err) {
+      const r = document.createRange(); r.selectNodeContents(document.getElementById("glista"));
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      m.className = "rowmsg"; m.textContent = "Lista selecionada: use Ctrl+C para copiar.";
+    }
+  });
+  draw();
+}
+
 /* ---------- Resumo do mês: cada produto somado em todos os eventos ---------- */
 const semAcento = s => String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
 const CANON = [
@@ -971,9 +1374,9 @@ function canon(produto) {
   return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
 }
 
-function agruparMes() {
+function agruparMes(lista = FMes()) {
   const G = {};
-  F.forEach(f => f.itens.forEach(i => {
+  lista.forEach(f => f.itens.forEach(i => {
     const nome = canon(i.produto);
     const g = G[nome] = G[nome] || { nome, itens: [], qtd: 0, valor: 0, cats: {}, evs: {}, forn: {}, st: {}, formandos: new Set() };
     g.itens.push(i);
@@ -994,8 +1397,8 @@ function renderResumo() {
   const main = document.getElementById("main");
   const fornNomes = Object.values(SUP).sort((a, b) => a.localeCompare(b, "pt-BR"));
   main.innerHTML = `
-    <div class="evhead"><span class="eyebrow">Resumo do mês · dezembro 2026</span><h2>Cada item no mês</h2>
-      <p class="hint">Cada produto somado em todos os eventos de dezembro, com quantidade, eventos, fornecedor e status. Abra um produto para ver a lista de formandos.</p></div>
+    <div class="evhead"><span class="eyebrow">Resumo do mês · ${esc(rotuloMes())}</span><h2>Cada item no mês</h2>
+      <p class="hint">Cada produto somado em todos os eventos ${MES_SEL === "todos" ? "de todos os meses" : "de " + esc(rotuloMes().toLowerCase())}, com quantidade, eventos, fornecedor e status. Abra um produto para ver a lista de formandos.</p></div>
     <div class="tools">
       <input id="rq" type="search" placeholder="Buscar produto" aria-label="Buscar produto">
       <select id="rcat" aria-label="Categoria"><option value="">Todas as categorias</option>${CAT_ORDER.map(c => `<option value="${c}">${CAT[c]}</option>`).join("")}</select>
@@ -1150,7 +1553,7 @@ function renderProd() {
     if (all) { const n = visiveis.filter(i => sel.has(i.id)).length; all.checked = n > 0 && n === visiveis.length; all.indeterminate = n > 0 && n < visiveis.length; }
   };
   const draw = () => {
-    const base = atual === "geral" ? F : byEv(EVENTOS.find(x => x.slug === atual).id);
+    const base = atual === "geral" ? FMes() : byEv(EVENTOS.find(x => x.slug === atual).id);
     const termo = pq.value.trim().toLowerCase();
     visiveis = allItens(base).filter(i => {
       if (pcat.value === "__prod" && !PRODUCAO.has(i.cat)) return false;
@@ -1213,7 +1616,7 @@ function renderProd() {
 function wireList() {
   const q = document.getElementById("q"), sit = document.getElementById("sit"), list = document.getElementById("list");
   const draw = () => {
-    const base = atual === "geral" ? F : byEv(EVENTOS.find(x => x.slug === atual).id);
+    const base = atual === "geral" ? FMes() : byEv(EVENTOS.find(x => x.slug === atual).id);
     const termo = q.value.trim().toLowerCase();
     if (atual === "geral" && !termo && sit.value === "all") {
       list.innerHTML = `<div class="empty">Digite um nome, item ou fornecedor, ou escolha um filtro, para listar formandos de todos os eventos. Para ver um evento inteiro, abra a pasta dele.</div>`;
@@ -1239,7 +1642,21 @@ function wireList() {
 
 
 /* ---------- Entrar, recuperar senha e abrir o painel ---------- */
-const PAGINAS = ["geral", "resumo", "novo", "lucro"];
+const PAGINAS = ["geral", "resumo", "novo", "lucro", "estoque", "compras"];
+
+// Opções do seletor de mês, conforme as datas dos eventos carregados
+function preencherMeses() {
+  const sel = document.getElementById("mesSel");
+  const ms = mesesDisponiveis();
+  if (MES_SEL !== "todos" && !ms.includes(MES_SEL)) MES_SEL = "todos";
+  sel.innerHTML = `<option value="todos">Todos os meses</option>` + ms.map(m => `<option value="${m}">${esc(rotuloDe(m))}</option>`).join("");
+  sel.value = MES_SEL;
+}
+document.getElementById("mesSel").addEventListener("change", e => {
+  MES_SEL = e.target.value;
+  try { localStorage.setItem("mcm-mes", MES_SEL); } catch (err) {}
+  renderFolders(); render();
+});
 const hInicial = /^#[A-Za-z0-9_-]+$/.test(HASH_INICIAL) ? HASH_INICIAL.slice(1) : "";
 const elBoot = document.getElementById("boot"), elAuth = document.getElementById("auth"), elApp = document.getElementById("app");
 let abrindo = false;
@@ -1301,6 +1718,7 @@ async function abrirPainel(session) {
     await carregar();
     LIVE = true;
     if (hInicial && (PAGINAS.includes(hInicial) || EVENTOS.some(e => e.slug === hInicial))) atual = hInicial;
+    preencherMeses();
     connMsg(); renderFolders(); render();
   } catch (e) {
     LIVE = false;

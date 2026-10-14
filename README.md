@@ -8,6 +8,16 @@ Painel da MCM Formatura para acompanhar eventos, formandos, itens de produção,
 - Dados e login: [Supabase](https://supabase.com) (Postgres + Auth). A estrutura do banco está em [`supabase/001_estrutura.sql`](supabase/001_estrutura.sql).
 - Acesso: só e-mails cadastrados na tabela `membros` enxergam os dados (regras de RLS no banco). A chave que aparece em `app.js` é a chave pública do Supabase; ela sozinha não dá acesso a nada.
 
+## Pastas do painel
+
+- **Novo pedido**: lança itens por setor (papelaria, lembranças, copos, doces, montagem).
+- **Visão geral**: eventos, recebimentos e status da produção do mês escolhido no seletor **Período** do topo.
+- **Itens e lucro**: preço de venda × custo do fornecedor por produto, no mês escolhido.
+- **Resumo do mês**: cada produto somado em todos os eventos do mês escolhido.
+- **Estoque de copos**: entradas e saídas de copos e taças, estoque mínimo e quanto falta comprar para os pedidos (tabelas `estoque_movimentos` e `copos_config`).
+- **Estoque geral**: estoque de cada produto × itens dos pedidos que ainda não estão prontos, com a lista do que falta pedir por fornecedor (tabela `estoque_geral`).
+- **Pastas dos eventos**: agrupadas por mês, com cada formando, seus itens, fornecedor, status e pagamentos.
+
 ## Telas de acesso
 
 1. **Entrar**: e-mail e senha.
@@ -47,7 +57,7 @@ Depois abra http://localhost:5173. Opções no endereço:
 
 ## Publicar
 
-1. No Supabase: rodar `supabase/001_estrutura.sql`, importar os dados e cadastrar os e-mails da equipe em `membros`.
+1. No Supabase: rodar os arquivos de `supabase/` em ordem (`001_estrutura.sql`, `002_administradores.sql`, `003_estoque.sql`), importar os dados e cadastrar os e-mails da equipe em `membros`.
 2. Na Vercel: **Add New → Project → Import** deste repositório. Framework Preset: **Other**. O `vercel.json` já define o build e a pasta `dist`. Cadastre as variáveis de ambiente antes do primeiro deploy.
 3. No Supabase, em Authentication → URL Configuration: colocar o endereço da Vercel em **Site URL** e em **Redirect URLs**, para o link de recuperação voltar ao site.
 4. Em Authentication → Email Templates → Reset Password: incluir `{{ .Token }}` para o e-mail trazer também o código.
