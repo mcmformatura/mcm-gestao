@@ -354,6 +354,17 @@ details.fo.achado { box-shadow: 0 0 0 3px var(--accent-soft); }
 .ag-mais > summary h3 { margin: 0; }
 @media (max-width: 760px) { .ag-row { grid-template-columns: 64px minmax(0, 1fr); } .ag-prod, .ag-chips, .ag-act { grid-column: 2; justify-items: start; } }
 
+/* Pagamentos na ficha do cliente */
+.pays li { grid-template-columns: 84px minmax(0, 1fr) auto auto; }
+.pg-para { color: var(--accent); font-weight: 600; }
+.pg-acts { display: inline-flex; gap: 4px; }
+.pg-acts .btn.x { font-size: 0.78rem; padding: 2px 8px; }
+.pg-acts .btn.x.bad { color: var(--bad); border-color: var(--bad); }
+.pg-form { display: grid; grid-template-columns: 120px 150px minmax(160px, 1.4fr) 150px minmax(120px, 1fr); gap: 8px; align-items: end; margin-top: 6px; padding: 10px 12px; background: var(--sunk); border: 1px dashed var(--line); border-radius: 8px; }
+.pg-form .field input, .pg-form .field select { padding: 6px 8px; font-size: 0.86rem; margin-bottom: 0; }
+.pg-form .pg-btn { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; }
+@media (max-width: 760px) { .pg-form { grid-template-columns: 1fr 1fr; } .pg-form .pg-para-in, .pg-form .pg-obs { grid-column: 1 / -1; } }
+
 /* Organizar pedidos por mês e turma */
 .folder.organizar svg path { fill: var(--accent); }
 .org-bar { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 8px 0; }

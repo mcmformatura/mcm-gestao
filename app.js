@@ -110,7 +110,7 @@ async function carregar() {
     todos("eventos", "id,nome,data,slug,ordem", ["ordem", "data", "nome"]),
     todos("formandos", "id,evento_id,nome", ["nome", "id"]),
     todos("itens", "id,formando_id,pedido_id,ordem,produto,fornecedor_id,qtd,valor_unit,valor_total,categoria,brinde,obs,status,pedido_em", ["formando_id", "ordem", "id"]),
-    todos("pagamentos", "id,formando_id,ordem,descricao,valor,data,status,tipo,obs", ["formando_id", "ordem", "id"]),
+    todos("pagamentos", "id,formando_id,ordem,descricao,valor,data,status,tipo,obs,recebedor", ["formando_id", "ordem", "id"]),
     todos("fornecedores", "id,nome", ["nome"]),
     todos("custos", "chave,produto,custo,venda", ["chave"]),
     todos("pedidos", "id,formando_id,formando_novo,total,criado_em", ["criado_em"]),
@@ -149,7 +149,7 @@ async function carregar() {
   });
   const pgPorFo = {};
   pgs.forEach(p => {
-    (pgPorFo[p.formando_id] = pgPorFo[p.formando_id] || []).push({ desc: p.descricao || "", valor: +p.valor || 0, data: p.data, status: p.status, tipo: p.tipo, obs: p.obs || "" });
+    (pgPorFo[p.formando_id] = pgPorFo[p.formando_id] || []).push({ id: p.id, ordem: p.ordem || 0, desc: p.descricao || "", valor: +p.valor || 0, data: p.data, status: p.status, tipo: p.tipo, obs: p.obs || "", recebedor: p.recebedor || "" });
   });
   F = fos.map(f => {
     FO_INFO[f.id] = { nome: f.nome, ev: f.evento_id };
@@ -397,12 +397,99 @@ function itemRows(f, filtro) {
   return out.join("");
 }
 
+// Para quem foi pago: sugestões a partir do que já foi lançado
+const RECEB_PADRAO = ["MCM Formatura", "Pix ML", "Bradesco", "XP", "Cartão", "Dinheiro"];
+function sugestoesRecebedor() {
+  const s = new Set(RECEB_PADRAO);
+  F.forEach(f => f.pg.forEach(p => { if (p.recebedor) s.add(p.recebedor); }));
+  return [...s].sort((a, b) => a.localeCompare(b, "pt-BR"));
+}
+function garantirListaRecebedor() {
+  let dl = document.getElementById("dl-receb");
+  if (!dl) { dl = document.createElement("datalist"); dl.id = "dl-receb"; document.body.appendChild(dl); }
+  dl.innerHTML = sugestoesRecebedor().map(r => `<option value="${esc(r)}">`).join("");
+}
+
 function payList(f) {
-  if (!f.pg.length) return `<p class="hint">Nenhum pagamento registrado.</p>`;
-  return `<ul>${f.pg.map(p => {
+  const lista = !f.pg.length ? `<p class="hint">Nenhum pagamento registrado.</p>` : `<ul>${f.pg.map((p, k) => {
     const chip = p.tipo === "DESCONTO" ? `<span class="chip gift">desconto</span>` : p.status === "PAGO" ? `<span class="chip ok">pago</span>` : `<span class="chip warn">a pagar</span>`;
-    return `<li><span class="d">${esc(p.data || "sem data")}</span><span>${chip} ${esc(p.desc)}${p.obs ? ` <span class="muted">· ${esc(p.obs)}</span>` : ""}</span><span class="v">${brl(p.valor)}</span></li>`;
+    const para = p.recebedor ? ` <span class="pg-para">→ ${esc(p.recebedor)}</span>` : "";
+    const acoes = LIVE && p.id != null ? `<span class="pg-acts">${p.status === "A_PAGAR" && p.tipo === "PARCELA" ? `<button class="btn x" type="button" data-pgpago="${k}" title="Marcar como pago hoje">pago</button>` : ""}<button class="btn x" type="button" data-pgdel="${k}" aria-label="Apagar pagamento" title="Apagar pagamento">×</button></span>` : "<span></span>";
+    return `<li><span class="d">${esc(p.data || "sem data")}</span><span>${chip} ${esc(p.desc)}${para}${p.obs ? ` <span class="muted">· ${esc(p.obs)}</span>` : ""}</span><span class="v">${brl(p.valor)}</span>${acoes}</li>`;
   }).join("")}</ul>`;
+  const form = !LIVE ? "" : `<form class="pg-form" data-pgform="${esc(f.id)}" novalidate>
+    <div class="field"><label>Valor (R$)</label><input name="valor" inputmode="decimal" placeholder="0,00" required></div>
+    <div class="field"><label>Data</label><input name="data" type="date" value="${hojeISO()}"></div>
+    <div class="field pg-para-in"><label>Para quem foi pago</label><input name="recebedor" list="dl-receb" maxlength="80" placeholder="ex.: MCM Formatura, Pix ML"></div>
+    <div class="field"><label>Situação</label><select name="tipo"><option value="PAGO">Pago</option><option value="A_PAGAR">A pagar (previsto)</option><option value="DESCONTO">Desconto</option></select></div>
+    <div class="field pg-obs"><label>Observação</label><input name="obs" maxlength="140" placeholder="opcional"></div>
+    <div class="pg-btn"><button class="btn primary" type="submit">Adicionar pagamento</button><span class="rowmsg" data-pgmsg role="status"></span></div>
+  </form>`;
+  return lista + form;
+}
+
+// Pagamentos: lançar, marcar como pago e apagar, direto na ficha do cliente
+function redesenharPagamentos(f, msg, tipo) {
+  recalc(f);
+  const det = document.querySelector(`details.fo[data-id="${CSS.escape(f.id)}"]`);
+  if (det) {
+    det.querySelector(":scope > summary").innerHTML = foSummary(f, atual === "geral");
+    const box = det.querySelector(".pays");
+    box.innerHTML = `<h3>Pagamentos</h3>${payList(f)}
+      <p class="hint">Total ${brl(f.total)}${f.desconto ? ` − desconto ${brl(f.desconto)}` : ""} · recebido ${brl(f.pago)} · saldo <b class="num">${brl(f.saldo)}</b></p>`;
+    if (msg) { const m = box.querySelector("[data-pgmsg]"); if (m) { m.className = "rowmsg " + (tipo || "ok"); m.textContent = msg; } }
+  }
+  garantirListaRecebedor();
+  refreshResumo();
+}
+// "1.234,56", "1234,56" ou "1234.56" -> 1234.56
+const numBR = s => { s = String(s || "").trim().replace(/[R$\s]/g, ""); if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); const n = parseFloat(s); return isFinite(n) ? n : null; };
+async function salvarPagamento(form) {
+  const f = F.find(x => x.id === form.dataset.pgform), m = form.querySelector("[data-pgmsg]");
+  if (!f || !LIVE) return;
+  const erro = t => { m.className = "rowmsg err"; m.textContent = t; };
+  const valor = arred(numBR(form.elements.valor.value) || 0);
+  const iso = form.elements.data.value, sit = form.elements.tipo.value;
+  const recebedor = form.elements.recebedor.value.trim().replace(/\s+/g, " "), obs = form.elements.obs.value.trim();
+  if (!(valor > 0)) return erro("Informe um valor maior que zero.");
+  if (iso && !DATA_OK.test(iso)) return erro("Data inválida.");
+  if (sit === "PAGO" && !iso) return erro("Informe a data do pagamento.");
+  const data = iso ? fmtData(iso) : null;
+  const tipo = sit === "DESCONTO" ? "DESCONTO" : "PARCELA", status = sit === "A_PAGAR" ? "A_PAGAR" : "PAGO";
+  const desc = tipo === "DESCONTO" ? "Desconto" : `${status === "PAGO" ? "Pago" : "A pagar"}${data ? " " + data.slice(0, 5) : ""}`;
+  const ordem = f.pg.reduce((a, p) => Math.max(a, p.ordem || 0), 0) + 1;
+  const btn = form.querySelector("button[type=submit]"); btn.disabled = true; m.className = "rowmsg"; m.textContent = "Salvando…";
+  try {
+    const { data: r, error } = await sb.from("pagamentos").insert({ formando_id: f.id, ordem, descricao: desc, valor, data, status, tipo, obs: obs || null, recebedor: recebedor || null }).select("id");
+    if (error) throw error;
+    if (!r || !r.length) throw new Error("nada foi salvo");
+    f.pg.push({ id: r[0].id, ordem, desc, valor, data, status, tipo, obs, recebedor });
+    redesenharPagamentos(f, `${tipo === "DESCONTO" ? "Desconto" : "Pagamento"} de ${brl(valor)} lançado.`);
+  } catch (err) { btn.disabled = false; erro(erroDb(err)); }
+}
+async function acaoPagamento(btn) {
+  const det = btn.closest("details.fo"), f = det && F.find(x => x.id === det.dataset.id);
+  if (!f || !LIVE) return;
+  const apagar = btn.dataset.pgdel != null, k = +(apagar ? btn.dataset.pgdel : btn.dataset.pgpago), p = f.pg[k];
+  if (!p || p.id == null) return;
+  if (apagar && btn.dataset.conf !== "1") { btn.dataset.conf = "1"; btn.textContent = "apagar?"; btn.classList.add("bad"); return; }
+  btn.disabled = true;
+  try {
+    if (apagar) {
+      const { data, error } = await sb.from("pagamentos").delete().eq("id", p.id).select("id");
+      if (error) throw error;
+      if (!data || !data.length) throw new Error("nada foi salvo");
+      f.pg.splice(k, 1);
+      redesenharPagamentos(f, "Pagamento apagado.");
+    } else {
+      const data = fmtData(hojeISO()), desc = `Pago ${data.slice(0, 5)}`;
+      const { data: r, error } = await sb.from("pagamentos").update({ status: "PAGO", data, descricao: desc }).eq("id", p.id).select("id");
+      if (error) throw error;
+      if (!r || !r.length) throw new Error("nada foi salvo");
+      Object.assign(p, { status: "PAGO", data, desc });
+      redesenharPagamentos(f, `${brl(p.valor)} marcado como pago hoje.`);
+    }
+  } catch (err) { btn.disabled = false; redesenharPagamentos(f, erroDb(err), "err"); }
 }
 
 function foSummary(f, mostraEvento) {
@@ -1982,6 +2069,9 @@ function wireList() {
     tr.dataset.lastCampo = s.dataset.campo;
     salvarItem(s.dataset.item, s.dataset.campo, s.value, tr);
   });
+  list.addEventListener("submit", ev => { const fm = ev.target.closest("form[data-pgform]"); if (fm) { ev.preventDefault(); salvarPagamento(fm); } });
+  list.addEventListener("click", ev => { const b = ev.target.closest("[data-pgdel], [data-pgpago]"); if (b) acaoPagamento(b); });
+  garantirListaRecebedor();
   draw();
 }
 

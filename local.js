@@ -107,10 +107,12 @@
         return { data: null, error: null };
       }
       if (op === "insert") {
-        if (linhas.some(r => r.id === payload.id)) return { data: null, error: { message: "duplicate key" } };
-        linhas.push({ ...copia(payload), criado_em: new Date().toISOString() });
+        const novo = { ...copia(payload), criado_em: new Date().toISOString() };
+        if (novo.id == null) novo.id = Math.max(0, ...linhas.map(r => +r.id || 0)) + 1;   // id automático, como no banco
+        if (linhas.some(r => r.id === novo.id)) return { data: null, error: { message: "duplicate key" } };
+        linhas.push(novo);
         salvar();
-        return { data: null, error: null };
+        return { data: devolver ? [{ id: novo.id }] : null, error: null };
       }
       if (op === "delete") {
         const fora = linhas.filter(passa);
