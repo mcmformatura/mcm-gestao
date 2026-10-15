@@ -11,6 +11,7 @@ Painel da MCM Formatura para acompanhar eventos, formandos, itens de produção,
 ## Pastas do painel
 
 - **Novo pedido**: lança itens por setor (papelaria, lembranças, copos, doces, montagem).
+- **Organizar pedidos**: cria turmas em cada mês, renomeia, muda o mês/dia, exclui turmas vazias e move clientes entre turmas (um a um ou vários marcados de uma vez). Cada turma é uma pasta do menu.
 - **Visão geral**: eventos, recebimentos e status da produção do mês escolhido no seletor **Período** do topo.
 - **Itens e lucro**: preço de venda × custo do fornecedor por produto, no mês escolhido.
 - **Resumo do mês**: cada produto somado em todos os eventos do mês escolhido.

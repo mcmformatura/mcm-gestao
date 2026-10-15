@@ -60,6 +60,7 @@
       range(a, b) { de = a; ate = b; return q; },
       limit(n) { ate = de + n - 1; return q; },
       eq(c, v) { filtros.push([c, v]); return q; },
+      in(c, vs) { filtros.push([c, vs, "in"]); return q; },
       update(o) { op = "update"; payload = o; return q; },
       upsert(o) { op = "upsert"; payload = o; return q; },
       insert(o) { op = "insert"; payload = o; return q; },
@@ -77,7 +78,7 @@
       if (!db[tabela] && ["estoque_movimentos", "copos_config", "estoque_geral"].includes(tabela)) db[tabela] = [];
       const linhas = db[tabela];
       if (!linhas) return { data: null, error: { message: `tabela ${tabela} não existe` } };
-      const passa = r => filtros.every(([c, v]) => r[c] === v);
+      const passa = r => filtros.every(([c, v, tipo]) => tipo === "in" ? v.includes(r[c]) : r[c] === v);
       if (op === "select") {
         let out = linhas.filter(passa);
         if (ordens.length) out = out.slice().sort((a, b) => {

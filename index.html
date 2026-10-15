@@ -303,6 +303,27 @@ details.rs[open] > summary .car { transform: rotate(90deg); }
 .btn.x[data-delmov] { font-size: 0.8rem; }
 .btn.x.bad { color: var(--bad); border-color: var(--bad); font-size: 0.8rem; }
 
+/* Organizar pedidos por mês e turma */
+.folder.organizar svg path { fill: var(--accent); }
+.org-bar { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 8px 0; }
+.org-bar select { max-width: 260px; }
+.org-sel { font-size: 0.84rem; color: var(--muted); }
+.org-list { display: grid; gap: 10px; }
+.org-mes { margin: 10px 0 0; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
+.org-turma { gap: 8px; padding: 12px 14px; }
+.org-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.org-head input { font: inherit; padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); min-width: 0; }
+.org-head .org-nome { font-weight: 600; flex: 1 1 220px; }
+.org-head .org-data { width: 150px; }
+.org-head .org-dia { width: 70px; }
+.org-tot { font-size: 0.82rem; }
+.org-fos { display: grid; gap: 2px; }
+.org-fo { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(160px, 260px); gap: 10px; align-items: center; padding: 5px 0; border-top: 1px solid var(--line); font-size: 0.9rem; }
+.org-fo select { font: inherit; font-size: 0.84rem; padding: 4px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); min-width: 0; }
+.org-ck { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.org-ck span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 640px) { .org-fo { grid-template-columns: minmax(0, 1fr); } }
+
 /* Estoque geral */
 .folder.egeral svg path { fill: var(--gold); }
 .eg { min-width: 1000px; }

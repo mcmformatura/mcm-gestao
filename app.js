@@ -122,6 +122,7 @@ async function carregar() {
 
   EVENTOS.length = 0;
   evs.forEach(e => EVENTOS.push({ id: e.id, nome: e.nome, data: fmtData(e.data) || "", slug: e.slug }));
+  ordenarEventos();
 
   SUP = {}; SUP_BY_NAME = {};
   sups.forEach(s => { SUP[s.id] = s.nome; SUP_BY_NAME[s.nome] = s.id; });
@@ -257,6 +258,7 @@ function renderFolders() {
   const nav = document.getElementById("folders");
   const tot = sum(F, "nEscolher");
   const items = [`<button class="folder overview novo" type="button" data-f="novo" aria-current="${atual === "novo"}">${plusIcon}<span class="fn">Novo pedido<span class="fd">lançar itens por setor</span></span><span class="fc">${Object.values(PEDIDOS).filter(p => !p.sync).length || ""}</span></button>`,
+    `<button class="folder overview organizar" type="button" data-f="organizar" aria-current="${atual === "organizar"}">${sortIcon}<span class="fn">Organizar pedidos<span class="fd">por mês e turma</span></span><span class="fc">${EVENTOS.length}</span></button>`,
     `<button class="folder overview" type="button" data-f="geral" aria-current="${atual === "geral"}">${gridIcon}<span class="fn">Visão geral<span class="fd">todos os eventos</span></span><span class="fc">${F.length}${tot ? `<span class="w">${tot} a escolher</span>` : ""}</span></button>`,
     `<button class="folder overview lucro" type="button" data-f="lucro" aria-current="${atual === "lucro"}">${coinIcon}<span class="fn">Itens e lucro<span class="fd">venda × custo do fornecedor</span></span><span class="fc"></span></button>`,
     `<button class="folder overview" type="button" data-f="resumo" aria-current="${atual === "resumo"}">${listIcon}<span class="fn">Resumo do mês<span class="fd">cada item no mês</span></span><span class="fc"></span></button>`,
@@ -427,7 +429,7 @@ function rerender(itemId, kind, text) {
 function refreshResumo() {
   if (atual === "resumo") { renderFolders(); return; }
   if (atual === "novo") { renderFolders(); renderNovoLista(); return; }
-  if (atual === "lucro" || atual === "estoque" || atual === "compras") { renderFolders(); return; }
+  if (atual === "lucro" || atual === "estoque" || atual === "compras" || atual === "organizar") { renderFolders(); return; }
   const k = document.querySelector(".kpis");
   const evAtual = EVENTOS.find(x => x.slug === atual);
   if (k && (atual === "geral" || evAtual)) {
@@ -469,6 +471,7 @@ function render() {
   if (atual === "lucro") { renderLucro(); return; }
   if (atual === "estoque") { renderEstoque(); return; }
   if (atual === "compras") { renderEstoqueGeral(); return; }
+  if (atual === "organizar") { renderOrganizar(); return; }
   if (atual !== "geral" && !EVENTOS.some(x => x.slug === atual)) atual = "geral";
   if (atual === "geral") {
     const grupos = {};
@@ -1287,6 +1290,196 @@ function renderEstoqueGeral() {
   draw();
 }
 
+/* ---------- Organizar pedidos: turmas por mês, montadas à mão ---------- */
+const sortIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h8v7H3zm10 0h8v4h-8zm0 6h8v10h-8zM3 13h8v7H3z"/></svg>`;
+const isoDe = e => (e && e.data && e.data.length >= 10) ? `${e.data.slice(6, 10)}-${e.data.slice(3, 5)}-${e.data.slice(0, 2)}` : "";
+const mesAtualISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
+function slugLivre(nome) {
+  const base = semAcento(nome).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "turma";
+  let s = base, n = 2;
+  while (PAGINAS.includes(s) || EVENTOS.some(e => e.slug === s)) s = `${base}-${n++}`;
+  return s;
+}
+// Mantém as turmas em ordem de data (sem data no fim), como no banco
+const ordenarEventos = () => EVENTOS.sort((a, b) => (isoDe(a) || "9999").localeCompare(isoDe(b) || "9999") || a.nome.localeCompare(b.nome, "pt-BR"));
+function opcoesTurma(selId) {
+  let html = "", mesAnt = null;
+  EVENTOS.forEach(e => {
+    const m = mesDe(e);
+    if (m !== mesAnt) { html += `${mesAnt ? "</optgroup>" : ""}<optgroup label="${esc(rotuloDe(m))}">`; mesAnt = m; }
+    html += `<option value="${esc(e.id)}"${e.id === selId ? " selected" : ""}>${esc(e.nome)}${e.data ? ` · ${e.data.slice(0, 5)}` : ""}</option>`;
+  });
+  return html + (mesAnt ? "</optgroup>" : "");
+}
+
+async function moverFormandos(ids, evId) {
+  ids = ids.filter(id => SAFE_ID.test(id) && FO_INFO[id] && FO_INFO[id].ev !== evId);
+  if (!ids.length) return 0;
+  const { data, error } = await sb.from("formandos").update({ evento_id: evId }).in("id", ids).select("id");
+  if (error) throw error;
+  if (!data || !data.length) throw new Error("nada foi salvo");
+  ids.forEach(id => { FO_INFO[id].ev = evId; const f = F.find(x => x.id === id); if (f) f.ev = evId; });
+  return ids.length;
+}
+
+const orgSel = new Set();   // clientes marcados para mover juntos
+function renderOrganizar() {
+  const main = document.getElementById("main");
+  const dis = LIVE ? "" : " disabled";
+  const mesPadrao = MES_SEL !== "todos" && MES_SEL !== "sem-data" ? MES_SEL : mesAtualISO();
+  main.innerHTML = `
+    <div class="evhead"><span class="eyebrow">Organizar pedidos · ${esc(rotuloMes())}</span><h2>Pedidos por mês e turma</h2>
+      <p class="hint">Crie as turmas de cada mês e mova os clientes para a turma certa. Cada turma vira uma pasta no menu, no mês escolhido. Para mover vários de uma vez, marque os clientes e use a barra de mover.</p></div>
+    ${LIVE ? "" : `<div class="callout ro">Somente leitura: as turmas não podem ser alteradas nesta visualização. Veja o motivo na faixa do topo.</div>`}
+    <form class="panel" id="onova" novalidate>
+      <h3>Nova turma</h3>
+      <div class="np-head two">
+        <div class="field"><label for="onome">Nome da turma</label><input id="onome" maxlength="80" placeholder="ex.: MED UNP 2027.1"${dis}></div>
+        <div class="field"><label for="omes">Mês</label><input id="omes" type="month" value="${mesPadrao}"${dis}></div>
+        <div class="field"><label for="odia">Dia do evento (opcional)</label><input id="odia" type="number" min="1" max="31" step="1" inputmode="numeric" placeholder="—"${dis}></div>
+      </div>
+      <div class="np-actions" style="justify-content:flex-start;align-items:center"><button class="btn primary" type="submit"${dis}>Criar turma</button><p class="np-msg" id="onovamsg" role="status"></p></div>
+    </form>
+    <div class="tools org-bar">
+      <input id="oq" type="search" placeholder="Buscar cliente ou turma" aria-label="Buscar cliente ou turma">
+      <span class="org-sel" id="osel"></span>
+      <select id="odest" aria-label="Turma de destino"${dis}>${opcoesTurma("")}</select>
+      <button class="btn" type="button" id="omover"${dis}>Mover marcados</button>
+      <button class="btn" type="button" id="olimpar">Desmarcar</button>
+      <span class="rowmsg" id="omsg" role="status"></span>
+    </div>
+    <div id="oturmas" class="org-list"></div>`;
+
+  const q = document.getElementById("oq"), lista = document.getElementById("oturmas");
+  const msg = (el, t, tipo) => { el.className = (el.id === "onovamsg" ? "np-msg " : "rowmsg ") + (tipo || ""); el.textContent = t; };
+
+  const draw = () => {
+    const termo = semAcento(q.value);
+    const evs = EVMes();
+    const blocos = [];
+    let mesAnt = null;
+    evs.forEach(e => {
+      const fos = byEv(e.id).slice().sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+      const bateTurma = !termo || semAcento(e.nome).includes(termo);
+      const vis = bateTurma ? fos : fos.filter(f => semAcento(f.nome).includes(termo));
+      if (termo && !vis.length && !bateTurma) return;
+      const m = mesDe(e);
+      if (m !== mesAnt) { blocos.push(`<h3 class="org-mes">${esc(rotuloDe(m))}</h3>`); mesAnt = m; }
+      const iso = isoDe(e), total = sum(fos, "devido");
+      blocos.push(`<section class="panel org-turma" data-ev="${esc(e.id)}">
+        <div class="org-head">
+          <input class="org-nome" data-campo="nome" value="${esc(e.nome)}" maxlength="80" aria-label="Nome da turma"${dis}>
+          <input class="org-data" data-campo="mes" type="month" value="${iso.slice(0, 7)}" aria-label="Mês da turma"${dis}>
+          <input class="org-dia" data-campo="dia" type="number" min="1" max="31" value="${iso ? +iso.slice(8, 10) : ""}" placeholder="dia" aria-label="Dia do evento"${dis}>
+          <span class="muted org-tot">${fos.length} cliente${fos.length === 1 ? "" : "s"} · ${brl(total)}</span>
+          <button class="btn" type="button" data-abrir="${esc(e.slug)}">Abrir pasta</button>
+          ${fos.length ? "" : `<button class="btn x bad" type="button" data-excluir${dis}>Excluir turma</button>`}
+          <span class="rowmsg" data-msg></span>
+        </div>
+        ${vis.length ? `<div class="org-fos">${vis.map(f => `<div class="org-fo">
+          <label class="org-ck"><input type="checkbox" data-fo="${esc(f.id)}"${orgSel.has(f.id) ? " checked" : ""}${dis}><span>${esc(f.nome)}</span></label>
+          <span class="muted num">${f.itens.length} itens · ${brl(f.devido)}</span>
+          <select data-mover="${esc(f.id)}" aria-label="Mover ${esc(f.nome)} para outra turma"${dis}>${opcoesTurma(e.id)}</select>
+        </div>`).join("")}</div>` : `<p class="hint">${fos.length ? "Nenhum cliente com essa busca." : "Turma vazia. Mova clientes para cá ou exclua a turma."}</p>`}
+      </section>`);
+    });
+    lista.innerHTML = blocos.length ? blocos.join("") : `<div class="empty">Nenhuma turma ${MES_SEL === "todos" ? "" : "neste mês "}${termo ? "com essa busca" : "ainda"}.</div>`;
+    const n = orgSel.size;
+    document.getElementById("osel").textContent = n ? `${n} marcado${n > 1 ? "s" : ""}` : "Nenhum cliente marcado";
+  };
+  const depois = () => { ordenarEventos(); renderFolders(); document.getElementById("odest").innerHTML = opcoesTurma(document.getElementById("odest").value); draw(); };
+
+  q.addEventListener("input", draw);
+  document.getElementById("olimpar").addEventListener("click", () => { orgSel.clear(); draw(); });
+
+  lista.addEventListener("click", async e => {
+    const ab = e.target.closest("[data-abrir]");
+    if (ab) { abrir(ab.dataset.abrir); return; }
+    const ex = e.target.closest("[data-excluir]");
+    if (!ex || !LIVE) return;
+    const sec = ex.closest("[data-ev]"), id = sec.dataset.ev, m = sec.querySelector("[data-msg]");
+    if (byEv(id).length) return;
+    if (ex.dataset.conf !== "1") { ex.dataset.conf = "1"; ex.textContent = "Confirmar exclusão"; return; }
+    ex.disabled = true;
+    try {
+      const { data, error } = await sb.from("eventos").delete().eq("id", id).select("id");
+      if (error) throw error;
+      if (!data || !data.length) throw new Error("nada foi salvo");
+      EVENTOS.splice(EVENTOS.findIndex(x => x.id === id), 1);
+      depois();
+    } catch (err) { ex.disabled = false; msg(m, erroDb(err), "err"); }
+  });
+
+  lista.addEventListener("change", async e => {
+    const t = e.target;
+    if (t.matches("input[data-fo]")) { if (t.checked) orgSel.add(t.dataset.fo); else orgSel.delete(t.dataset.fo); draw(); return; }
+    if (!LIVE) return;
+    const sec = t.closest("[data-ev]"), m = sec && sec.querySelector("[data-msg]");
+    if (t.matches("select[data-mover]")) {
+      t.disabled = true;
+      try { await moverFormandos([t.dataset.mover], t.value); orgSel.delete(t.dataset.mover); depois(); }
+      catch (err) { t.disabled = false; msg(m, erroDb(err), "err"); }
+      return;
+    }
+    if (t.matches("[data-campo]")) {
+      const ev = EVENTOS.find(x => x.id === sec.dataset.ev);
+      const nome = sec.querySelector(".org-nome").value.trim().replace(/\s+/g, " ");
+      const mes = sec.querySelector(".org-data").value, dia = Math.round(num(sec.querySelector(".org-dia").value) || 0);
+      if (!nome) { msg(m, "Dê um nome para a turma.", "err"); return; }
+      if (dia && (dia < 1 || dia > 31)) { msg(m, "Dia entre 1 e 31.", "err"); return; }
+      const data = /^\d{4}-\d{2}$/.test(mes) ? `${mes}-${String(dia || 1).padStart(2, "0")}` : null;
+      if (data && isNaN(new Date(data + "T12:00:00").getTime())) { msg(m, "Data inválida.", "err"); return; }
+      try {
+        const { data: r, error } = await sb.from("eventos").update({ nome, data }).eq("id", ev.id).select("id");
+        if (error) throw error;
+        if (!r || !r.length) throw new Error("nada foi salvo");
+        ev.nome = nome; ev.data = data ? fmtData(data) : "";
+        depois();
+        const s2 = lista.querySelector(`[data-ev="${CSS.escape(ev.id)}"] [data-msg]`);
+        if (s2) msg(s2, "salvo", "ok");
+      } catch (err) { msg(m, erroDb(err), "err"); }
+    }
+  });
+
+  document.getElementById("omover").addEventListener("click", async () => {
+    const m = document.getElementById("omsg"), dest = document.getElementById("odest").value;
+    if (!LIVE) return;
+    if (!orgSel.size) { msg(m, "Marque os clientes que quer mover.", "err"); return; }
+    const b = document.getElementById("omover"); b.disabled = true;
+    try {
+      const n = await moverFormandos([...orgSel], dest);
+      const ev = EVENTOS.find(x => x.id === dest);
+      orgSel.clear(); depois();
+      msg(document.getElementById("omsg"), `${n} cliente${n === 1 ? "" : "s"} movido${n === 1 ? "" : "s"} para ${ev ? ev.nome : "a turma"}.`, "ok");
+    } catch (err) { msg(m, erroDb(err), "err"); }
+    b.disabled = !LIVE;
+  });
+
+  document.getElementById("onova").addEventListener("submit", async e => {
+    e.preventDefault();
+    if (!LIVE) return;
+    const m = document.getElementById("onovamsg");
+    const nome = document.getElementById("onome").value.trim().replace(/\s+/g, " ");
+    const mes = document.getElementById("omes").value, dia = Math.round(num(document.getElementById("odia").value) || 0);
+    if (!nome) { msg(m, "Dê um nome para a turma.", "err"); return; }
+    if (!/^\d{4}-\d{2}$/.test(mes)) { msg(m, "Escolha o mês.", "err"); return; }
+    if (dia && (dia < 1 || dia > 31)) { msg(m, "Dia entre 1 e 31.", "err"); return; }
+    const data = `${mes}-${String(dia || 1).padStart(2, "0")}`;
+    if (isNaN(new Date(data + "T12:00:00").getTime())) { msg(m, "Data inválida.", "err"); return; }
+    const novo = { id: "ev_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), nome, data, slug: slugLivre(nome), ordem: 100 };
+    try {
+      const { error } = await sb.from("eventos").insert(novo);
+      if (error) throw error;
+      EVENTOS.push({ id: novo.id, nome, data: fmtData(data), slug: novo.slug });
+      document.getElementById("onome").value = ""; document.getElementById("odia").value = "";
+      depois();
+      msg(m, `Turma ${nome} criada em ${rotuloDe(mes)}.`, "ok");
+    } catch (err) { msg(m, erroDb(err), "err"); }
+  });
+
+  draw();
+}
+
 /* ---------- Resumo do mês: cada produto somado em todos os eventos ---------- */
 const semAcento = s => String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
 const CANON = [
@@ -1642,7 +1835,7 @@ function wireList() {
 
 
 /* ---------- Entrar, recuperar senha e abrir o painel ---------- */
-const PAGINAS = ["geral", "resumo", "novo", "lucro", "estoque", "compras"];
+const PAGINAS = ["geral", "resumo", "novo", "lucro", "estoque", "compras", "organizar"];
 
 // Opções do seletor de mês, conforme as datas dos eventos carregados
 function preencherMeses() {
