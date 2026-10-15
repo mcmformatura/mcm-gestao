@@ -248,35 +248,62 @@ async function salvarLote(ids, campo, valor, progresso) {
 }
 
 /* ---------- Interface ---------- */
-let atual = "geral";
+let atual = "agenda";
 const abertos = new Set();
 const byEv = id => F.filter(f => f.ev === id);
 const sum = (arr, k) => arr.reduce((a, x) => a + x[k], 0);
 const allItens = lista => lista.flatMap(f => f.itens);
 
+// Meses abertos no menu (o resto fica recolhido); padrão: mês atual e o seguinte
+const mesesAbertos = (() => {
+  try { const s = JSON.parse(localStorage.getItem("mcm-meses-abertos") || "null"); if (Array.isArray(s)) return new Set(s); } catch (e) {}
+  const d = new Date(), prox = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+  return new Set([`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, `${prox.getFullYear()}-${String(prox.getMonth() + 1).padStart(2, "0")}`]);
+})();
+const guardarMeses = () => { try { localStorage.setItem("mcm-meses-abertos", JSON.stringify([...mesesAbertos])); } catch (e) {} };
+
 function renderFolders() {
   const nav = document.getElementById("folders");
   const tot = sum(F, "nEscolher");
-  const items = [`<button class="folder overview novo" type="button" data-f="novo" aria-current="${atual === "novo"}">${plusIcon}<span class="fn">Novo pedido<span class="fd">lançar itens por setor</span></span><span class="fc">${Object.values(PEDIDOS).filter(p => !p.sync).length || ""}</span></button>`,
+  const hoje = hojeISO();
+  const atrasadas = EVENTOS.filter(e => { const iso = isoDe(e); return iso && iso < hoje && byEv(e.id).some(f => f.itens.some(i => i.status !== "ENTREGUE")); }).length;
+  const semana = EVENTOS.filter(e => { const iso = isoDe(e); return iso && iso >= hoje && diasAte(iso) <= 7; }).length;
+  const items = [`<div class="nav-h">Dia a dia</div>`,
+    `<button class="folder overview agenda" type="button" data-f="agenda" aria-current="${atual === "agenda"}">${calIcon}<span class="fn">Próximas entregas<span class="fd">o que vence primeiro</span></span><span class="fc">${semana ? `${semana} na semana` : ""}${atrasadas ? `<span class="w">${atrasadas} atrasada${atrasadas === 1 ? "" : "s"}</span>` : ""}</span></button>`,
+    `<button class="folder overview novo" type="button" data-f="novo" aria-current="${atual === "novo"}">${plusIcon}<span class="fn">Novo pedido<span class="fd">lançar itens por setor</span></span><span class="fc">${Object.values(PEDIDOS).filter(p => !p.sync).length || ""}</span></button>`,
     `<button class="folder overview organizar" type="button" data-f="organizar" aria-current="${atual === "organizar"}">${sortIcon}<span class="fn">Organizar pedidos<span class="fd">por mês e turma</span></span><span class="fc">${EVENTOS.length}</span></button>`,
     `<button class="folder overview" type="button" data-f="geral" aria-current="${atual === "geral"}">${gridIcon}<span class="fn">Visão geral<span class="fd">todos os eventos</span></span><span class="fc">${F.length}${tot ? `<span class="w">${tot} a escolher</span>` : ""}</span></button>`,
+    `<div class="nav-h">Controle</div>`,
     `<button class="folder overview lucro" type="button" data-f="lucro" aria-current="${atual === "lucro"}">${coinIcon}<span class="fn">Itens e lucro<span class="fd">venda × custo do fornecedor</span></span><span class="fc"></span></button>`,
     `<button class="folder overview" type="button" data-f="resumo" aria-current="${atual === "resumo"}">${listIcon}<span class="fn">Resumo do mês<span class="fd">cada item no mês</span></span><span class="fc"></span></button>`,
     `<button class="folder overview estoque" type="button" data-f="estoque" aria-current="${atual === "estoque"}">${cupIcon}<span class="fn">Estoque de copos<span class="fd">entradas, saídas e o que falta</span></span><span class="fc">${(n => n ? `<span class="w">${n} ${n === 1 ? "alerta" : "alertas"}</span>` : "")(nAlertasEstoque())}</span></button>`,
     `<button class="folder overview egeral" type="button" data-f="compras" aria-current="${atual === "compras"}">${boxIcon}<span class="fn">Estoque geral<span class="fd">estoque × pedidos: o que pedir</span></span><span class="fc">${(n => n ? `<span class="w">${n} a pedir</span>` : "")(linhasEstoqueGeral().filter(l => l.aPedir > 0).length)}</span></button>`];
-  let mesAnt = null;
-  EVENTOS.slice().sort((a, b) => mesDe(a).localeCompare(mesDe(b))).forEach((e, i) => {
-    const m = mesDe(e);
-    if (m !== mesAnt) { items.push(`<div class="mes-h${MES_SEL !== "todos" && MES_SEL !== m ? " off" : ""}">${esc(rotuloDe(m))}</div>`); mesAnt = m; }
-    const l = byEv(e.id), w = sum(l, "nEscolher");
-    items.push(`<button class="folder${i === 0 ? " sep" : ""}" type="button" data-f="${e.slug}" aria-current="${atual === e.slug}">${folderIcon}<span class="fn">${esc(e.nome)}<span class="fd">${e.data.slice(0, 5)} · ${l.length} formando${l.length > 1 ? "s" : ""}</span></span><span class="fc">${w ? `<span class="w">${w} a escolher</span>` : ""}</span></button>`);
+  items.push(`<div class="nav-h">Turmas por mês</div>`);
+  const porMes = {};
+  EVENTOS.forEach(e => { (porMes[mesDe(e)] = porMes[mesDe(e)] || []).push(e); });
+  Object.keys(porMes).sort().forEach(m => {
+    const evs = porMes[m], aberto = mesesAbertos.has(m);
+    const n = evs.reduce((a, e) => a + byEv(e.id).length, 0);
+    items.push(`<button class="mes-h${aberto ? " on" : ""}${MES_SEL !== "todos" && MES_SEL !== m ? " off" : ""}" type="button" data-mes="${m}" aria-expanded="${aberto}"><span class="car" aria-hidden="true"></span>${esc(rotuloDe(m))}<span class="mes-n">${evs.length} turma${evs.length === 1 ? "" : "s"} · ${n}</span></button>`);
+    if (!aberto) return;
+    evs.forEach(e => {
+      const l = byEv(e.id), w = sum(l, "nEscolher");
+      items.push(`<button class="folder ev" type="button" data-f="${e.slug}" aria-current="${atual === e.slug}" title="${esc(e.nome)}">${folderIcon}<span class="fn"><span class="fnm">${esc(e.nome)}</span><span class="fd">${e.data ? e.data.slice(0, 5) + " · " : ""}${l.length} cliente${l.length === 1 ? "" : "s"}</span></span><span class="fc">${w ? `<span class="w" title="${w} itens com fornecedor a escolher">${w}</span>` : ""}</span></button>`);
+    });
   });
   nav.innerHTML = items.join("");
   nav.querySelectorAll(".folder").forEach(b => b.addEventListener("click", () => abrir(b.dataset.f)));
+  nav.querySelectorAll("[data-mes]").forEach(b => b.addEventListener("click", () => {
+    const m = b.dataset.mes;
+    if (mesesAbertos.has(m)) mesesAbertos.delete(m); else mesesAbertos.add(m);
+    guardarMeses(); renderFolders();
+  }));
 }
 
 function abrir(slug) {
   atual = slug;
+  const ev = EVENTOS.find(e => e.slug === slug);
+  if (ev && !mesesAbertos.has(mesDe(ev))) { mesesAbertos.add(mesDe(ev)); guardarMeses(); }
   try { history.replaceState(null, "", "#" + slug); } catch (e) {}
   renderFolders(); render();
   window.scrollTo({ top: 0 });
@@ -430,6 +457,7 @@ function refreshResumo() {
   if (atual === "resumo") { renderFolders(); return; }
   if (atual === "novo") { renderFolders(); renderNovoLista(); return; }
   if (atual === "lucro" || atual === "estoque" || atual === "compras" || atual === "organizar") { renderFolders(); return; }
+  if (atual === "agenda") { renderFolders(); renderAgenda(); return; }
   const k = document.querySelector(".kpis");
   const evAtual = EVENTOS.find(x => x.slug === atual);
   if (k && (atual === "geral" || evAtual)) {
@@ -472,6 +500,7 @@ function render() {
   if (atual === "estoque") { renderEstoque(); return; }
   if (atual === "compras") { renderEstoqueGeral(); return; }
   if (atual === "organizar") { renderOrganizar(); return; }
+  if (atual === "agenda") { renderAgenda(); return; }
   if (atual !== "geral" && !EVENTOS.some(x => x.slug === atual)) atual = "geral";
   if (atual === "geral") {
     const grupos = {};
@@ -1290,6 +1319,129 @@ function renderEstoqueGeral() {
   draw();
 }
 
+/* ---------- Próximas entregas: o que vence primeiro e o que já passou ---------- */
+const calIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h2v2h6V2h2v2h3v17H4V4h3zm-1 7v10h12V9zm2 2h3v3H8z"/></svg>`;
+const diasAte = iso => Math.round((new Date(iso + "T12:00:00") - new Date(hojeISO() + "T12:00:00")) / 864e5);
+function infoTurma(e) {
+  const fos = byEv(e.id), its = allItens(fos), prod = its.filter(i => PRODUCAO.has(i.cat));
+  const prontos = prod.filter(i => i.status === "PRONTO" || i.status === "ENTREGUE").length;
+  const naoEntregues = its.filter(i => i.status !== "ENTREGUE");
+  return { e, iso: isoDe(e), fos, its, prod, prontos, naoEntregues, escolher: sum(fos, "nEscolher"), saldo: sum(fos, "saldo"), comSaldo: fos.filter(f => f.saldo > 0).length };
+}
+const quando = d => d < 0 ? `há ${-d} dia${d === -1 ? "" : "s"}` : d === 0 ? "hoje" : d === 1 ? "amanhã" : `em ${d} dias`;
+
+async function marcarEntregue(ids) {
+  ids = ids.filter(id => ITEM[id] && SAFE_ID.test(id) && ITEM[id].status !== "ENTREGUE");
+  if (!ids.length) return 0;
+  let n = 0;
+  for (let k = 0; k < ids.length; k += 80) {            // em blocos, para o endereço da requisição não ficar grande demais
+    const parte = ids.slice(k, k + 80);
+    const { data, error } = await sb.from("itens").update({ status: "ENTREGUE", atualizado_em: new Date().toISOString(), atualizado_por: USER ? USER.id : null }).in("id", parte).select("id");
+    if (error) throw error;
+    (data || []).forEach(r => { if (ITEM[r.id]) { ITEM[r.id].status = "ENTREGUE"; n++; } });
+  }
+  F.forEach(recalc);
+  return n;
+}
+
+function renderAgenda() {
+  const main = document.getElementById("main");
+  const dis = LIVE ? "" : " disabled";
+  const ts = EVENTOS.filter(e => isoDe(e)).map(infoTurma);
+  const atrasadas = ts.filter(t => diasAte(t.iso) < 0 && t.naoEntregues.length).sort((a, b) => a.iso.localeCompare(b.iso));
+  const semana = ts.filter(t => { const d = diasAte(t.iso); return d >= 0 && d <= 7; });
+  const mes = ts.filter(t => { const d = diasAte(t.iso); return d > 7 && d <= 30; });
+  const depois = ts.filter(t => diasAte(t.iso) > 30);
+  const semData = EVENTOS.filter(e => !isoDe(e)).map(infoTurma);
+  const linha = t => {
+    const d = diasAte(t.iso), pct = t.prod.length ? t.prontos / t.prod.length : 1;
+    return `<div class="ag-row${d < 0 ? " late" : d <= 7 ? " soon" : ""}" data-ev="${esc(t.e.id)}">
+      <div class="ag-date"><b>${t.e.data.slice(0, 5)}</b><span>${quando(d)}</span></div>
+      <div class="ag-main"><button class="ag-name" type="button" data-abrir="${esc(t.e.slug)}">${esc(t.e.nome)}</button>
+        <span class="sub">${t.fos.length} cliente${t.fos.length === 1 ? "" : "s"} · ${t.its.length} itens${t.naoEntregues.length && d < 0 ? ` · ${t.naoEntregues.length} sem baixa de entrega` : ""}</span></div>
+      <div class="ag-prod" title="Itens de papelaria, lembranças e copos prontos ou entregues"><span class="bar" aria-hidden="true"><i style="width:${(pct * 100).toFixed(0)}%"></i></span><span class="num">${t.prontos}/${t.prod.length} prontos</span></div>
+      <div class="ag-chips">${t.escolher ? `<span class="chip warn">${t.escolher} a escolher</span>` : ""}${t.saldo > 0 ? `<span class="chip bad">${brl(t.saldo)} a receber</span>` : `<span class="chip ok">quitado</span>`}</div>
+      <div class="ag-act">${d < 0 && t.naoEntregues.length ? `<button class="btn" type="button" data-entregue${dis}>Marcar tudo entregue</button>` : `<button class="btn" type="button" data-abrir="${esc(t.e.slug)}">Abrir</button>`}<span class="rowmsg" data-msg></span></div>
+    </div>`;
+  };
+  const bloco = (titulo, l, vazio, extra) => `<section class="panel ag-sec"><div class="np-sh"><h3>${titulo} <span class="muted">· ${l.length}</span></h3>${extra || ""}</div>
+    ${l.length ? `<div class="ag-list">${l.map(linha).join("")}</div>` : `<p class="hint">${vazio}</p>`}</section>`;
+  const prox30 = semana.concat(mes);
+  main.innerHTML = `<div id="agwrap" class="agwrap">
+    <div class="evhead"><span class="eyebrow">Próximas entregas · hoje ${fmtData(hojeISO()).slice(0, 5)}</span><h2>O que vence primeiro</h2>
+      <p class="hint">Turmas pela data de entrega. As que já passaram e ainda têm itens sem baixa aparecem em <b>Atrasadas</b>: confira e use <b>Marcar tudo entregue</b> para dar baixa de uma vez.</p></div>
+    <div class="kpis">
+      <div class="kpi${atrasadas.length ? " hl" : ""}"><span class="eyebrow">Atrasadas</span><span class="v">${atrasadas.length}</span><span class="s">${atrasadas.reduce((a, t) => a + t.naoEntregues.length, 0)} itens sem baixa</span></div>
+      <div class="kpi"><span class="eyebrow">Próximos 7 dias</span><span class="v">${semana.length} turma${semana.length === 1 ? "" : "s"}</span><span class="s">${semana.reduce((a, t) => a + t.fos.length, 0)} clientes</span></div>
+      <div class="kpi"><span class="eyebrow">A escolher fornecedor</span><span class="v">${prox30.reduce((a, t) => a + t.escolher, 0)}</span><span class="s">itens nos próximos 30 dias</span></div>
+      <div class="kpi"><span class="eyebrow">A receber</span><span class="v">${brl(prox30.reduce((a, t) => a + t.saldo, 0))}</span><span class="s">nos próximos 30 dias</span></div>
+    </div>
+    ${atrasadas.length ? bloco("Atrasadas", atrasadas, "") : ""}
+    ${bloco("Próximos 7 dias", semana, "Nenhuma entrega nos próximos 7 dias.")}
+    ${bloco("Próximos 30 dias", mes, "Nenhuma entrega entre 8 e 30 dias.")}
+    <details class="panel ag-sec ag-mais"><summary><h3>Mais adiante <span class="muted">· ${depois.length}</span></h3></summary>${depois.length ? `<div class="ag-list">${depois.map(linha).join("")}</div>` : `<p class="hint">Nada depois de 30 dias.</p>`}</details>
+    ${semData.length ? `<p class="hint">${semData.length} turma${semData.length === 1 ? "" : "s"} sem data não aparece${semData.length === 1 ? "" : "m"} aqui. Coloque a data em <b>Organizar pedidos</b>.</p>` : ""}</div>`;
+
+  document.getElementById("agwrap").addEventListener("click", async ev => {
+    const ab = ev.target.closest("[data-abrir]");
+    if (ab) { abrir(ab.dataset.abrir); return; }
+    const b = ev.target.closest("[data-entregue]");
+    if (!b || !LIVE) return;
+    const row = b.closest("[data-ev]"), m = row.querySelector("[data-msg]");
+    const t = infoTurma(EVENTOS.find(e => e.id === row.dataset.ev));
+    if (b.dataset.conf !== "1") { b.dataset.conf = "1"; b.textContent = `Confirmar: ${t.naoEntregues.length} itens`; b.classList.add("bad"); return; }
+    b.disabled = true; b.textContent = "Salvando…";
+    try {
+      const n = await marcarEntregue(t.naoEntregues.map(i => i.id));
+      renderFolders(); renderAgenda();
+      const r2 = document.querySelector(`.ag-row[data-ev="${CSS.escape(t.e.id)}"] [data-msg]`);
+      if (r2) { r2.className = "rowmsg ok"; r2.textContent = `${n} itens entregues`; }
+      else { const h = document.querySelector("#main .evhead .hint"); if (h) h.insertAdjacentHTML("afterend", `<p class="rowmsg ok">${esc(t.e.nome)}: ${n} itens marcados como entregues.</p>`); }
+    } catch (err) { b.disabled = false; b.textContent = "Marcar tudo entregue"; m.className = "rowmsg err"; m.textContent = erroDb(err); }
+  });
+}
+
+/* ---------- Busca rápida de cliente (topo) ---------- */
+function abrirCliente(foId) {
+  const f = F.find(x => x.id === foId), e = f && EVENTOS.find(x => x.id === f.ev);
+  if (!e) return;
+  aba = "formandos"; abertos.add(f.id);
+  abrir(e.slug);
+  const d = document.querySelector(`details.fo[data-id="${CSS.escape(f.id)}"]`);
+  if (d) { d.open = true; d.scrollIntoView({ block: "start", behavior: "smooth" }); d.classList.add("achado"); setTimeout(() => d.classList.remove("achado"), 2000); }
+}
+(function wireBusca() {
+  const inp = document.getElementById("busca"), res = document.getElementById("buscaRes");
+  if (!inp) return;
+  let achados = [], foco = 0;
+  const fechar = () => { res.hidden = true; achados = []; };
+  const desenhar = () => {
+    res.innerHTML = achados.length ? achados.map((a, k) => `<button type="button" class="br-it${k === foco ? " on" : ""}" data-k="${k}">${a.html}</button>`).join("")
+      : `<p class="hint br-vazio">Nenhum cliente ou turma com esse nome.</p>`;
+    res.hidden = false;
+  };
+  inp.addEventListener("input", () => {
+    const t = semAcento(inp.value);
+    if (t.length < 2) { fechar(); return; }
+    const evs = EVENTOS.filter(e => semAcento(e.nome).includes(t)).slice(0, 4).map(e => ({ tipo: "ev", id: e.slug,
+      html: `<span class="br-n">${esc(e.nome)}</span><span class="br-s">turma · ${e.data ? e.data.slice(0, 5) : "sem data"} · ${byEv(e.id).length} clientes</span>` }));
+    const fos = F.filter(f => semAcento(f.nome).includes(t)).slice(0, 8).map(f => { const e = EVENTOS.find(x => x.id === f.ev) || {}; return { tipo: "fo", id: f.id,
+      html: `<span class="br-n">${esc(f.nome)}</span><span class="br-s">${esc(e.nome || "")}${e.data ? ` · ${e.data.slice(0, 5)}` : ""} · ${f.saldo > 0 ? `saldo ${brl(f.saldo)}` : "quitado"}</span>` }; });
+    achados = fos.concat(evs); foco = 0; desenhar();
+  });
+  const escolher = a => { if (!a) return; fechar(); inp.value = ""; inp.blur(); if (a.tipo === "fo") abrirCliente(a.id); else abrir(a.id); };
+  inp.addEventListener("keydown", e => {
+    if (res.hidden) return;
+    if (e.key === "ArrowDown") { foco = Math.min(achados.length - 1, foco + 1); desenhar(); e.preventDefault(); }
+    else if (e.key === "ArrowUp") { foco = Math.max(0, foco - 1); desenhar(); e.preventDefault(); }
+    else if (e.key === "Enter") { escolher(achados[foco]); e.preventDefault(); }
+    else if (e.key === "Escape") fechar();
+  });
+  res.addEventListener("mousedown", e => { const b = e.target.closest(".br-it"); if (b) { e.preventDefault(); escolher(achados[+b.dataset.k]); } });
+  inp.addEventListener("blur", () => setTimeout(fechar, 150));
+  document.addEventListener("keydown", e => { if (e.key === "/" && !/input|select|textarea/i.test(document.activeElement.tagName)) { e.preventDefault(); inp.focus(); } });
+})();
+
 /* ---------- Organizar pedidos: turmas por mês, montadas à mão ---------- */
 const sortIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h8v7H3zm10 0h8v4h-8zm0 6h8v10h-8zM3 13h8v7H3z"/></svg>`;
 const isoDe = e => (e && e.data && e.data.length >= 10) ? `${e.data.slice(6, 10)}-${e.data.slice(3, 5)}-${e.data.slice(0, 2)}` : "";
@@ -1835,7 +1987,7 @@ function wireList() {
 
 
 /* ---------- Entrar, recuperar senha e abrir o painel ---------- */
-const PAGINAS = ["geral", "resumo", "novo", "lucro", "estoque", "compras", "organizar"];
+const PAGINAS = ["agenda", "geral", "resumo", "novo", "lucro", "estoque", "compras", "organizar"];
 
 // Opções do seletor de mês, conforme as datas dos eventos carregados
 function preencherMeses() {
@@ -1911,6 +2063,7 @@ async function abrirPainel(session) {
     await carregar();
     LIVE = true;
     if (hInicial && (PAGINAS.includes(hInicial) || EVENTOS.some(e => e.slug === hInicial))) atual = hInicial;
+    { const ev = EVENTOS.find(e => e.slug === atual); if (ev) mesesAbertos.add(mesDe(ev)); }
     preencherMeses();
     connMsg(); renderFolders(); render();
   } catch (e) {

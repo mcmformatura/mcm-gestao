@@ -292,7 +292,11 @@ details.rs[open] > summary .car { transform: rotate(90deg); }
 .mesbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .messel { display: inline-flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--muted); }
 .messel select { font: inherit; font-size: 0.9rem; font-weight: 600; padding: 6px 10px; border: 1px solid var(--accent); border-radius: 8px; background: var(--surface); color: var(--ink); }
-.mes-h { font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); font-weight: 700; padding: 10px 10px 2px; }
+.mes-h { display: flex; align-items: center; gap: 8px; width: 100%; font: inherit; font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); font-weight: 700; padding: 8px 10px; background: none; border: 1px solid transparent; border-radius: 8px; cursor: pointer; text-align: left; }
+.mes-h:hover { background: var(--surface); border-color: var(--line); }
+.mes-h .car { border-left-color: var(--gold); }
+.mes-h.on .car { transform: rotate(90deg); }
+.mes-h .mes-n { margin-left: auto; font-family: var(--f-data); font-size: 0.7rem; letter-spacing: 0; text-transform: none; color: var(--muted); font-weight: 400; }
 .mes-h.off { color: var(--muted); opacity: .6; }
 @media (max-width: 860px) { .mes-h { align-self: center; padding: 0 4px 0 10px; } }
 
@@ -302,6 +306,53 @@ details.rs[open] > summary .car { transform: rotate(90deg); }
 .et-h { min-width: 640px; }
 .btn.x[data-delmov] { font-size: 0.8rem; }
 .btn.x.bad { color: var(--bad); border-color: var(--bad); font-size: 0.8rem; }
+
+/* Menu: grupos, meses recolhíveis e pastas de turma em uma linha */
+.nav-h { font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); font-weight: 700; padding: 12px 10px 2px; }
+.nav-h:first-child { padding-top: 0; }
+.folder.ev { padding: 6px 10px 6px 18px; }
+.folder.ev svg { width: 16px; height: 16px; }
+.folder.ev .fnm { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.88rem; }
+.folder.ev .fd { font-size: 0.72rem; }
+.folder.ev .fc .w { display: inline-block; min-width: 22px; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--warn) 14%, transparent); text-align: center; }
+.folder.agenda svg path { fill: var(--bad); }
+@media (max-width: 860px) { .nav-h { display: none; } .folder.ev { padding: 9px 10px; } }
+
+/* Busca rápida no topo */
+.busca { position: relative; flex: 1 1 260px; max-width: 420px; }
+.busca input { width: 100%; font: inherit; font-size: 0.92rem; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.busca-res { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / .12); padding: 4px; display: grid; max-height: 360px; overflow-y: auto; }
+.br-it { display: grid; gap: 1px; text-align: left; font: inherit; padding: 7px 10px; border: 0; border-radius: 7px; background: none; color: var(--ink); cursor: pointer; }
+.br-it.on, .br-it:hover { background: var(--accent-soft); }
+.br-n { font-weight: 600; font-size: 0.9rem; }
+.br-s { font-size: 0.76rem; color: var(--muted); }
+.br-vazio { padding: 8px 10px; }
+details.fo.achado { box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* Próximas entregas */
+.agwrap { display: grid; gap: 16px; }
+.ag-sec { gap: 6px; }
+.ag-list { display: grid; }
+.ag-row { display: grid; grid-template-columns: 78px minmax(0, 1.6fr) minmax(120px, 1fr) minmax(0, 1.3fr) auto; gap: 12px; align-items: center; padding: 9px 0; border-top: 1px solid var(--line); }
+.ag-row:first-child { border-top: 0; }
+.ag-row.late { box-shadow: inset 3px 0 0 var(--bad); padding-left: 10px; }
+.ag-row.soon .ag-date b { color: var(--accent); }
+.ag-date { display: grid; font-family: var(--f-data); }
+.ag-date b { font-size: 1rem; }
+.ag-date span { font-size: 0.72rem; color: var(--muted); }
+.ag-row.late .ag-date span { color: var(--bad); }
+.ag-name { font: inherit; font-weight: 600; background: none; border: 0; padding: 0; color: var(--ink); cursor: pointer; text-align: left; }
+.ag-name:hover { color: var(--accent); text-decoration: underline; }
+.ag-main { display: grid; min-width: 0; }
+.ag-main .sub { font-size: 0.78rem; color: var(--muted); }
+.ag-prod { display: grid; gap: 3px; font-size: 0.76rem; color: var(--muted); }
+.ag-chips { display: flex; gap: 4px; flex-wrap: wrap; }
+.ag-act { display: grid; justify-items: end; }
+.ag-act .btn.bad { color: var(--bad); border-color: var(--bad); }
+.ag-mais > summary { list-style: none; cursor: pointer; }
+.ag-mais > summary::-webkit-details-marker { display: none; }
+.ag-mais > summary h3 { margin: 0; }
+@media (max-width: 760px) { .ag-row { grid-template-columns: 64px minmax(0, 1fr); } .ag-prod, .ag-chips, .ag-act { grid-column: 2; justify-items: start; } }
 
 /* Organizar pedidos por mês e turma */
 .folder.organizar svg path { fill: var(--accent); }
@@ -435,6 +486,7 @@ button.link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
       <label class="messel"><span>Período</span><select id="mesSel" aria-label="Mês dos eventos"></select></label></div>
     <div class="headrow">
       <h1>Painel MCM Gestão</h1>
+      <div class="busca"><input id="busca" type="search" placeholder="Buscar cliente ou turma  ( / )" aria-label="Buscar cliente ou turma" autocomplete="off"><div id="buscaRes" class="busca-res" role="listbox" hidden></div></div>
       <div class="quem"><span>Conectado como <b id="quem"></b></span><button class="btn" type="button" data-sair>Sair</button></div>
     </div>
   </header>
