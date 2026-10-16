@@ -109,7 +109,7 @@ async function carregar() {
   const [evs, fos, its, pgs, sups, cus, peds, movs, cfgs, egs] = await Promise.all([
     todos("eventos", "id,nome,data,slug,ordem", ["ordem", "data", "nome"]),
     todos("formandos", "id,evento_id,nome", ["nome", "id"]),
-    todos("itens", "id,formando_id,pedido_id,ordem,produto,fornecedor_id,qtd,valor_unit,valor_total,categoria,brinde,obs,status,pedido_em,codigo_pedido", ["formando_id", "ordem", "id"]),
+    todos("itens", "id,formando_id,pedido_id,ordem,produto,fornecedor_id,qtd,valor_unit,valor_total,categoria,brinde,obs,status,pedido_em,codigo_pedido,obs_cores", ["formando_id", "ordem", "id"]),
     todos("pagamentos", "id,formando_id,ordem,descricao,valor,data,status,tipo,obs,recebedor", ["formando_id", "ordem", "id"]),
     todos("fornecedores", "id,nome", ["nome"]),
     todos("custos", "chave,produto,custo,venda", ["chave"]),
@@ -141,7 +141,7 @@ async function carregar() {
     const it = {
       id: r.id, fo: r.formando_id, produto: r.produto, fornId: r.fornecedor_id && SUP[r.fornecedor_id] ? r.fornecedor_id : null,
       qtd: +r.qtd || 0, vu: n(r.valor_unit), vt: n(r.valor_total), cat: CAT[r.categoria] ? r.categoria : "OUTROS",
-      brinde: !!r.brinde, obs: r.obs || "", status: r.status, pedido: r.pedido_em || "", codigo: r.codigo_pedido || "", novo: !!r.pedido_id,
+      brinde: !!r.brinde, obs: r.obs || "", status: r.status, pedido: r.pedido_em || "", codigo: r.codigo_pedido || "", cores: r.obs_cores || "", novo: !!r.pedido_id,
     };
     ITEM[it.id] = it;
     (porFo[it.fo] = porFo[it.fo] || []).push(it);
@@ -196,33 +196,40 @@ function erroDb(e) {
 const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
 // Fornecedor que trabalha com número de pedido (a Império manda um código para cada pedido)
 const ehImperio = fornId => /imp[eé]rio/i.test(SUP[fornId] || "");
+// Guardanapos e bolsas (não tag, lacre ou adicional de bolsa) têm um campo próprio para as cores
+const temCores = produto => /^\s*(guardanapos?|bolsa)\b/i.test(produto || "");
 function novoEstado(it, campo, valor) {
-  const pedido = it.pedido || "", codigo = it.codigo || "";
-  if (campo === "forn") { if (valor && !SUP[valor]) return null; return { status: it.status, fornId: valor || null, pedido, codigo }; }
-  if (campo === "status") { if (!STATUS_LABEL[valor]) return null; return { status: valor, fornId: it.fornId, pedido, codigo }; }
+  const atual = { status: it.status, fornId: it.fornId, pedido: it.pedido || "", codigo: it.codigo || "", cores: it.cores || "" };
+  if (campo === "forn") { if (valor && !SUP[valor]) return null; return { ...atual, fornId: valor || null }; }
+  if (campo === "status") { if (!STATUS_LABEL[valor]) return null; return { ...atual, status: valor }; }
   if (campo === "pedido") {
     if (valor && !DATA_OK.test(valor)) return null;
     // Ao registrar o pedido, um item ainda "aguardando produção" passa para "repassado ao fornecedor"
     const status = valor && it.status === "AGUARDANDO_PRODUCAO" ? "REPASSADO" : it.status;
-    return { status, fornId: it.fornId, pedido: valor || "", codigo };
+    return { ...atual, status, pedido: valor || "" };
   }
   if (campo === "codigo") {
     const v = String(valor || "").trim().replace(/\s+/g, " ");
     if (v.length > 40) return null;
     // Código do pedido = pedido feito: "aguardando produção" passa para "repassado"
     const status = v && it.status === "AGUARDANDO_PRODUCAO" ? "REPASSADO" : it.status;
-    return { status, fornId: it.fornId, pedido, codigo: v };
+    return { ...atual, status, codigo: v };
+  }
+  if (campo === "cores") {
+    const v = String(valor || "").trim().replace(/\s+/g, " ");
+    if (v.length > 200) return null;
+    return { ...atual, cores: v };
   }
   return null;
 }
 async function gravar(it, novo) {
   const { data, error } = await sb.from("itens").update({
-    status: novo.status, fornecedor_id: novo.fornId || null, pedido_em: novo.pedido || null, codigo_pedido: novo.codigo || null,
+    status: novo.status, fornecedor_id: novo.fornId || null, pedido_em: novo.pedido || null, codigo_pedido: novo.codigo || null, obs_cores: novo.cores || null,
     atualizado_em: new Date().toISOString(), atualizado_por: USER ? USER.id : null,
   }).eq("id", it.id).select("id");
   if (error) throw error;
   if (!data || !data.length) throw new Error("nada foi salvo");
-  it.status = novo.status; it.fornId = novo.fornId || null; it.pedido = novo.pedido || ""; it.codigo = novo.codigo || "";
+  it.status = novo.status; it.fornId = novo.fornId || null; it.pedido = novo.pedido || ""; it.codigo = novo.codigo || ""; it.cores = novo.cores || "";
 }
 
 async function salvarItem(itemId, campo, valor, tr) {
@@ -373,13 +380,21 @@ function pedidoCell(i) {
 // Mensagem de "salvo"/erro aparece embaixo do campo que foi alterado
 const flashEm = (flash, campo) => {
   if (!flash) return "";
-  const alvo = flash[2] === "forn" || flash[2] === "pedido" || flash[2] === "codigo" ? flash[2] : "status";
+  const alvo = ["forn", "pedido", "codigo", "cores"].includes(flash[2]) ? flash[2] : "status";
   return alvo === campo ? `<span class="rowmsg ${flash[0]}">${esc(flash[1])}</span>` : "";
 };
+// Observação geral + campo de cores (só guardanapos e bolsas)
+function obsCell(i, flash) {
+  const obs = String(i.obs || "").replace(/\s*\/?\s*BRINDE$/i, "").trim();
+  if (!temCores(i.produto) && !i.cores) return esc(obs);
+  const cores = !LIVE
+    ? (i.cores ? `<span class="cores-ro"><b>Cores:</b> ${esc(i.cores)}</span>` : "")
+    : `<input type="text" class="ed cores${i.cores ? " has" : ""}" data-item="${esc(i.id)}" data-campo="cores" value="${esc(i.cores || "")}" maxlength="200" placeholder="Cores: ex. azul marinho e dourado" aria-label="Cores de ${esc(i.produto)}">`;
+  return `${obs ? `<span class="obs-t">${esc(obs)}</span>` : ""}${cores}${flashEm(flash, "cores")}`;
+}
 
 function itemRow(i, flash) {
   const total = i.brinde ? `<span class="chip gift">brinde</span>` : i.vt == null ? `<span class="muted">a definir</span>` : brl(i.vt);
-  const obs = String(i.obs || "").replace(/\s*\/?\s*BRINDE$/i, "").trim();
   return `<tr data-row="${esc(i.id)}"${flash ? ` class="flash-${flash[0]}"` : ""}>
     <td class="prod">${esc(i.produto)}</td>
     <td class="r num">${int(i.qtd)}</td>
@@ -388,7 +403,7 @@ function itemRow(i, flash) {
     <td>${pedidoCell(i)}${flashEm(flash, "pedido")}${flashEm(flash, "codigo")}</td>
     <td>${statusCell(i)}${flashEm(flash, "status")}</td>
     <td class="r num">${total}</td>
-    <td class="obs">${esc(obs)}</td>
+    <td class="obs">${obsCell(i, flash)}</td>
   </tr>`;
 }
 
@@ -1934,7 +1949,6 @@ function renderTab() {
 function prodRow(i, flash) {
   const info = FO_INFO[i.fo] || {};
   const ev = EVENTOS.find(e => e.id === info.ev);
-  const obs = String(i.obs || "").replace(/\s*\/?\s*BRINDE$/i, "").trim();
   const cls = [sel.has(i.id) ? "sel" : "", flash ? `flash-${flash[0]}` : ""].filter(Boolean).join(" ");
   return `<tr data-row="${esc(i.id)}" data-view="prod"${cls ? ` class="${cls}"` : ""}>
     ${LIVE ? `<td class="ck"><input type="checkbox" data-ck="${esc(i.id)}" aria-label="Selecionar ${esc(i.produto)} de ${esc(info.nome)}"${sel.has(i.id) ? " checked" : ""}></td>` : ""}
@@ -1944,7 +1958,7 @@ function prodRow(i, flash) {
     <td>${fornCell(i)}${flashEm(flash, "forn")}</td>
     <td>${pedidoCell(i)}${flashEm(flash, "pedido")}${flashEm(flash, "codigo")}</td>
     <td>${statusCell(i)}${flashEm(flash, "status")}</td>
-    <td class="obs">${esc(obs)}</td>
+    <td class="obs">${obsCell(i, flash)}</td>
   </tr>`;
 }
 
@@ -1954,7 +1968,7 @@ function renderProd() {
   tb.innerHTML = `
     ${LIVE ? `<div class="callout">Mude o status direto na linha, ou marque vários itens e use a barra abaixo para mudar todos de uma vez. Cada mudança fica salva na hora.</div>` : roCallout()}
     <div class="tools">
-      <input id="pq" type="search" placeholder="Buscar item, formando, fornecedor ou nº do pedido" aria-label="Buscar item">
+      <input id="pq" type="search" placeholder="Buscar item, formando, fornecedor, nº do pedido ou cor" aria-label="Buscar item">
       <select id="pst" aria-label="Filtrar por status"><option value="">Todos os status</option>${STATUS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
       <select id="pfo" aria-label="Filtrar por fornecedor"><option value="">Todos os fornecedores</option><option value="__escolher">Fornecedor a escolher</option>${fornOpts.map(([id, n]) => `<option value="${esc(id)}">${esc(n)}</option>`).join("")}</select>
       <select id="pcat" aria-label="Filtrar por categoria"><option value="__prod">Itens de produção</option><option value="">Todos os itens</option>${CAT_ORDER.map(c => `<option value="${c}">${CAT[c]}</option>`).join("")}</select>
@@ -2012,7 +2026,7 @@ function renderProd() {
       if (pfo.value && pfo.value !== "__escolher" && i.fornId !== pfo.value) return false;
       if (termo) {
         const nome = (FO_INFO[i.fo] || {}).nome || "";
-        if (!(i.produto.toLowerCase().includes(termo) || nome.toLowerCase().includes(termo) || (SUP[i.fornId] || "").toLowerCase().includes(termo) || (i.codigo || "").toLowerCase().includes(termo))) return false;
+        if (!(i.produto.toLowerCase().includes(termo) || nome.toLowerCase().includes(termo) || (SUP[i.fornId] || "").toLowerCase().includes(termo) || (i.codigo || "").toLowerCase().includes(termo) || (i.cores || "").toLowerCase().includes(termo))) return false;
       }
       return true;
     }).sort((a, b) => ((FO_INFO[a.fo] || {}).nome || "").localeCompare((FO_INFO[b.fo] || {}).nome || "", "pt-BR") || CAT_ORDER.indexOf(a.cat) - CAT_ORDER.indexOf(b.cat));
