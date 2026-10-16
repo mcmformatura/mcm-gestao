@@ -111,7 +111,7 @@ async function carregar() {
   const [evs, fos, its, pgs, sups, cus, peds, movs, cfgs, egs, ocs] = await Promise.all([
     todos("eventos", "id,nome,data,slug,ordem", ["ordem", "data", "nome"]),
     todos("formandos", "id,evento_id,nome", ["nome", "id"]),
-    todos("itens", "id,formando_id,pedido_id,ordem,produto,fornecedor_id,qtd,valor_unit,valor_total,categoria,brinde,obs,status,pedido_em,codigo_pedido,obs_cores,dtf_status,tag_status,tassel_status,solicitado_status,separado_status,adesivo_status", ["formando_id", "ordem", "id"]),
+    todos("itens", "id,formando_id,pedido_id,ordem,produto,fornecedor_id,qtd,valor_unit,valor_total,categoria,brinde,obs,status,pedido_em,codigo_pedido,obs_cores,dtf_status,tag_status,tassel_status,solicitado_status,separado_status,adesivo_status,link_drive", ["formando_id", "ordem", "id"]),
     todos("pagamentos", "id,formando_id,ordem,descricao,valor,data,status,tipo,obs,recebedor", ["formando_id", "ordem", "id"]),
     todos("fornecedores", "id,nome", ["nome"]),
     todos("custos", "chave,produto,custo,venda", ["chave"]),
@@ -145,7 +145,7 @@ async function carregar() {
     const it = {
       id: r.id, fo: r.formando_id, produto: r.produto, fornId: r.fornecedor_id && SUP[r.fornecedor_id] ? r.fornecedor_id : null,
       qtd: +r.qtd || 0, vu: n(r.valor_unit), vt: n(r.valor_total), cat: CAT[r.categoria] ? r.categoria : "OUTROS",
-      brinde: !!r.brinde, obs: r.obs || "", status: r.status, pedido: r.pedido_em || "", codigo: r.codigo_pedido || "", cores: r.obs_cores || "", dtf: r.dtf_status || "", tag: r.tag_status || "", tassel: r.tassel_status || "", solicitado: r.solicitado_status || "", separado: r.separado_status || "", adesivo: r.adesivo_status || "", novo: !!r.pedido_id,
+      brinde: !!r.brinde, obs: r.obs || "", status: r.status, pedido: r.pedido_em || "", codigo: r.codigo_pedido || "", cores: r.obs_cores || "", dtf: r.dtf_status || "", tag: r.tag_status || "", tassel: r.tassel_status || "", solicitado: r.solicitado_status || "", separado: r.separado_status || "", adesivo: r.adesivo_status || "", link: r.link_drive || "", novo: !!r.pedido_id,
     };
     ITEM[it.id] = it;
     (porFo[it.fo] = porFo[it.fo] || []).push(it);
@@ -239,7 +239,7 @@ const BARRAS = [
   { campo: "solicitado", rotulo: "Solicitado ao cliente", aria: "Já foi solicitado ao cliente", opcoes: i => temSolicitado(i) ? SOLICITADO_LOCAL : null },
 ];
 function novoEstado(it, campo, valor) {
-  const atual = { status: it.status, fornId: it.fornId, pedido: it.pedido || "", codigo: it.codigo || "", cores: it.cores || "", dtf: it.dtf || "", tag: it.tag || "", tassel: it.tassel || "", solicitado: it.solicitado || "", separado: it.separado || "", adesivo: it.adesivo || "" };
+  const atual = { status: it.status, fornId: it.fornId, pedido: it.pedido || "", codigo: it.codigo || "", cores: it.cores || "", dtf: it.dtf || "", tag: it.tag || "", tassel: it.tassel || "", solicitado: it.solicitado || "", separado: it.separado || "", adesivo: it.adesivo || "", link: it.link || "" };
   const barra = BARRAS.find(b => b.campo === campo);
   if (barra) { if (valor && !(barra.opcoes(it) || []).some(([k]) => k === valor)) return null; return { ...atual, [campo]: valor || "" }; }
   if (campo === "forn") { if (valor && !SUP[valor]) return null; return { ...atual, fornId: valor || null }; }
@@ -262,25 +262,38 @@ function novoEstado(it, campo, valor) {
     if (v.length > 200) return null;
     return { ...atual, cores: v };
   }
+  if (campo === "link") {
+    const v = String(valor || "").trim();
+    if (v && !linkOk(v)) return null;
+    return { ...atual, link: v };
+  }
   return null;
+}
+// Só aceita endereço http(s) de verdade (nada de "javascript:" e afins)
+function linkOk(v) {
+  if (v.length > 500 || !/^https?:\/\//i.test(v)) return false;
+  try { const u = new URL(v); return u.protocol === "https:" || u.protocol === "http:"; } catch (e) { return false; }
 }
 async function gravar(it, novo) {
   const { data, error } = await sb.from("itens").update({
     status: novo.status, fornecedor_id: novo.fornId || null, pedido_em: novo.pedido || null, codigo_pedido: novo.codigo || null, obs_cores: novo.cores || null,
-    dtf_status: novo.dtf || null, tag_status: novo.tag || null, tassel_status: novo.tassel || null, solicitado_status: novo.solicitado || null, separado_status: novo.separado || null, adesivo_status: novo.adesivo || null,
+    dtf_status: novo.dtf || null, tag_status: novo.tag || null, tassel_status: novo.tassel || null, solicitado_status: novo.solicitado || null, separado_status: novo.separado || null, adesivo_status: novo.adesivo || null, link_drive: novo.link || null,
     atualizado_em: new Date().toISOString(), atualizado_por: USER ? USER.id : null,
   }).eq("id", it.id).select("id");
   if (error) throw error;
   if (!data || !data.length) throw new Error("nada foi salvo");
   it.status = novo.status; it.fornId = novo.fornId || null; it.pedido = novo.pedido || ""; it.codigo = novo.codigo || ""; it.cores = novo.cores || "";
-  it.dtf = novo.dtf || ""; it.tag = novo.tag || ""; it.tassel = novo.tassel || ""; it.solicitado = novo.solicitado || ""; it.separado = novo.separado || ""; it.adesivo = novo.adesivo || "";
+  it.dtf = novo.dtf || ""; it.tag = novo.tag || ""; it.tassel = novo.tassel || ""; it.solicitado = novo.solicitado || ""; it.separado = novo.separado || ""; it.adesivo = novo.adesivo || ""; it.link = novo.link || "";
 }
 
 async function salvarItem(itemId, campo, valor, tr) {
   const it = ITEM[itemId];
   if (!it || !LIVE || !SAFE_ID.test(itemId)) return;
   const novo = novoEstado(it, campo, valor);
-  if (!novo) return;
+  if (!novo) {
+    if (campo === "link") { tr.dataset.lastCampo = "link"; rerender(itemId, "err", "não salvo: cole um link que comece com https://"); }
+    return;
+  }
   tr.classList.add("saving");
   tr.querySelectorAll("select, input").forEach(s => { s.disabled = true; });
   try {
@@ -437,17 +450,23 @@ function pedidoCell(i) {
 // Mensagem de "salvo"/erro aparece embaixo do campo que foi alterado
 const flashEm = (flash, campo) => {
   if (!flash) return "";
-  const alvo = ["forn", "pedido", "codigo", "cores", ...BARRAS.map(b => b.campo)].includes(flash[2]) ? flash[2] : "status";
+  const alvo = ["forn", "pedido", "codigo", "cores", "link", ...BARRAS.map(b => b.campo)].includes(flash[2]) ? flash[2] : "status";
   return alvo === campo ? `<span class="rowmsg ${flash[0]}">${esc(flash[1])}</span>` : "";
 };
-// Observação geral + campo de cores (só guardanapos e bolsas)
+// ID visual, taxa de papelaria e vetorização têm o link do Drive com a arte
+const temLink = produto => /id(entidade)?\s+visual|taxa\s+(de\s+)?(arte\s+de\s+)?papelaria|arte\s+(de\s+)?papelaria|vetor/i.test(produto || "");
+// Observação geral + campo de cores (guardanapos e bolsas) + link do Drive (ID visual e taxas de arte)
 function obsCell(i, flash) {
   const obs = String(i.obs || "").replace(/\s*\/?\s*BRINDE$/i, "").trim();
-  if (!temCores(i.produto) && !i.cores) return esc(obs);
-  const cores = !LIVE
+  const comCores = temCores(i.produto) || i.cores, comLink = temLink(i.produto) || i.link;
+  if (!comCores && !comLink) return esc(obs);
+  const cores = !comCores ? "" : !LIVE
     ? (i.cores ? `<span class="cores-ro"><b>Cores:</b> ${esc(i.cores)}</span>` : "")
     : `<input type="text" class="ed cores${i.cores ? " has" : ""}" data-item="${esc(i.id)}" data-campo="cores" value="${esc(i.cores || "")}" maxlength="200" placeholder="Cores: ex. azul marinho e dourado" aria-label="Cores de ${esc(i.produto)}">`;
-  return `${obs ? `<span class="obs-t">${esc(obs)}</span>` : ""}${cores}${flashEm(flash, "cores")}`;
+  const abrir = i.link && linkOk(i.link) ? `<a class="drive-a" href="${esc(i.link)}" target="_blank" rel="noopener noreferrer">Abrir no Drive ↗</a>` : "";
+  const link = !comLink ? "" : !LIVE ? abrir
+    : `<input type="url" class="ed link${i.link ? " has" : ""}" data-item="${esc(i.id)}" data-campo="link" value="${esc(i.link || "")}" maxlength="500" placeholder="Link do Drive: https://drive.google.com/…" aria-label="Link do Drive de ${esc(i.produto)}">${abrir}`;
+  return `${obs ? `<span class="obs-t">${esc(obs)}</span>` : ""}${cores}${flashEm(flash, "cores")}${link}${flashEm(flash, "link")}`;
 }
 
 function itemRow(i, flash) {
