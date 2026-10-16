@@ -219,7 +219,13 @@ const opcoesDtf = i => {
   if (i.cat === "COPOS" || ehCopoCuiaTermico(p) || ehGloss(p) || ehPulseiraLed(p)) return DTF_COPOS;
   return ehBolsaOuLeticia(p) ? DTF_COSTURA : null;
 };
-const temTag = i => /^\s*guardanapos?\b/i.test(i.produto || "") && !/sem\s+tag/i.test(i.produto || "");
+// Guardanapo (menos "sem tag") e caixa de acrílico (caixa, caixinha, cx…) têm a barra da tag
+const ehCaixaAcrilico = p => /^\s*(adc\s+)?(caii?xa|caixinha|cx)s?\b.*acr/i.test(p);
+const temTag = i => {
+  const p = i.produto || "";
+  if (/sem\s+tag/i.test(p)) return false;
+  return /^\s*guardanapos?\b/i.test(p) || ehCaixaAcrilico(p);
+};
 // Menu provençal: se já está com o tassel
 const TASSEL_LOCAL = [["COM", "Já está com tassel"], ["SEM", "Ainda sem tassel"]];
 const temTassel = i => /\bmenu\b.*proven[cç]al/i.test(i.produto || "");
