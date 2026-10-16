@@ -434,8 +434,7 @@ function obsCatRow(fo, c, msg) {
   if (!LIVE && !v) return "";
   const campo = !LIVE
     ? `<span class="obscat-ro">${esc(v)}</span>`
-    : `<textarea class="obscat${v ? " has" : ""}" data-obscat="${esc(c)}" data-fo="${esc(fo)}" rows="${Math.min(6, Math.max(2, v.split("
-").length))}" maxlength="1000" placeholder="Observação final de ${esc(CAT[c].toLowerCase())}: cores, combinações, detalhes de entrega…" aria-label="Observação final de ${esc(CAT[c])}">${esc(v)}</textarea>`;
+    : `<textarea class="obscat${v ? " has" : ""}" data-obscat="${esc(c)}" data-fo="${esc(fo)}" rows="${Math.min(6, Math.max(2, v.split("\n").length))}" maxlength="1000" placeholder="Observação final de ${esc(CAT[c].toLowerCase())}: cores, combinações, detalhes de entrega…" aria-label="Observação final de ${esc(CAT[c])}">${esc(v)}</textarea>`;
   return `<tr class="obs-cat" data-obscat-row="${esc(c)}"><td colspan="8"><span class="obscat-l">Observação final · ${CAT[c]}</span>${campo}${msg ? `<span class="rowmsg ${msg[0]}">${esc(msg[1])}</span>` : ""}</td></tr>`;
 }
 async function gravarObsCat(fo, c, valor) {
