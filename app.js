@@ -229,20 +229,21 @@ const temTag = i => {
 // Menu provençal: se já está com o tassel
 const TASSEL_LOCAL = [["COM", "Já está com tassel"], ["SEM", "Ainda sem tassel"]];
 const temTassel = i => /\bmenu\b.*proven[cç]al/i.test(i.produto || "");
-// Tags, bottons, aventais e óculos: se já foi solicitado ao cliente (nomes, fotos, arte…)
+// Tags, bottons, aventais, óculos e marcadores de mesa: se já foi solicitado ao cliente (nomes, fotos, arte…)
 const SOLICITADO_LOCAL = [["SIM", "Sim, já solicitado"], ["NAO", "Ainda não"]];
-const temSolicitado = i => /^\s*(tags?|bott?ons?|aventa(l|is))\b/i.test(i.produto || "") || /[oó]culos/i.test(i.produto || "");
+const ehMarcador = i => /^\s*marcador(es)?\s+de\s+(mesa|lugar)/i.test(i.produto || "");
+const temSolicitado = i => /^\s*(tags?|bott?ons?|aventa(l|is))\b/i.test(i.produto || "") || /[oó]culos/i.test(i.produto || "") || ehMarcador(i);
 // Guardanapos: se já estão separados em loja
 const SEPARADO_LOCAL = [["SIM", "Sim, já separados"], ["NAO", "Ainda não"]];
 const ehGuardanapo = i => /^\s*guardanapos?\b/i.test(i.produto || "");
-// Barras embaixo do status: campo do item, rótulo, descrição para leitor de tela e opções (null = item não tem a barra)
+// Barras embaixo do status: campo do item, rótulo (texto ou função do item), descrição para leitor de tela e opções (null = item não tem a barra)
 const BARRAS = [
   { campo: "dtf", rotulo: "DTF", aria: "Onde está o DTF", opcoes: opcoesDtf },
   { campo: "tag", rotulo: "Tag", aria: "Onde está a tag", opcoes: i => temTag(i) ? TAG_LOCAL : null },
   { campo: "separado", rotulo: "Separados em loja", aria: "Guardanapos já separados em loja", opcoes: i => ehGuardanapo(i) ? SEPARADO_LOCAL : null },
   { campo: "tassel", rotulo: "Tassel", aria: "Tassel", opcoes: i => temTassel(i) ? TASSEL_LOCAL : null },
   { campo: "adesivo", rotulo: "Adesivo", aria: "Onde está o adesivo", opcoes: i => ehBastaoLed(i.produto || "") ? DTF_COPOS : null },
-  { campo: "solicitado", rotulo: "Solicitado ao cliente", aria: "Já foi solicitado ao cliente", opcoes: i => temSolicitado(i) ? SOLICITADO_LOCAL : null },
+  { campo: "solicitado", rotulo: i => ehMarcador(i) ? "Nomes solicitados" : "Solicitado ao cliente", aria: "Já foi solicitado ao cliente", opcoes: i => temSolicitado(i) ? SOLICITADO_LOCAL : null },
 ];
 function novoEstado(it, campo, valor) {
   const atual = { status: it.status, fornId: it.fornId, pedido: it.pedido || "", codigo: it.codigo || "", cores: it.cores || "", dtf: it.dtf || "", tag: it.tag || "", tassel: it.tassel || "", solicitado: it.solicitado || "", separado: it.separado || "", adesivo: it.adesivo || "", link: it.link || "" };
@@ -435,9 +436,10 @@ function statusCell(i) {
 }
 // Barras embaixo do status (DTF, tag, tassel, solicitado ao cliente), cada uma com sua mensagem de "salvo"
 function localCell(i, flash) {
-  return BARRAS.map(({ campo, rotulo, aria, opcoes: deItem }) => {
+  return BARRAS.map(({ campo, rotulo: r, aria, opcoes: deItem }) => {
     const opcoes = deItem(i);
     if (!opcoes) return "";
+    const rotulo = typeof r === "function" ? r(i) : r;
     const valor = i[campo] || "", nome = (opcoes.find(([k]) => k === valor) || [])[1];
     if (!LIVE) return nome ? `<span class="local-ro" data-local="${esc(valor)}">${rotulo}: ${esc(nome)}</span>` : "";
     return `<label class="local-l">${rotulo}<select class="ed local" data-local="${esc(valor)}" data-item="${esc(i.id)}" data-campo="${campo}" aria-label="${aria} de ${esc(i.produto)}">
