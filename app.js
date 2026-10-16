@@ -111,7 +111,7 @@ async function carregar() {
   const [evs, fos, its, pgs, sups, cus, peds, movs, cfgs, egs, ocs] = await Promise.all([
     todos("eventos", "id,nome,data,slug,ordem", ["ordem", "data", "nome"]),
     todos("formandos", "id,evento_id,nome", ["nome", "id"]),
-    todos("itens", "id,formando_id,pedido_id,ordem,produto,fornecedor_id,qtd,valor_unit,valor_total,categoria,brinde,obs,status,pedido_em,codigo_pedido,obs_cores", ["formando_id", "ordem", "id"]),
+    todos("itens", "id,formando_id,pedido_id,ordem,produto,fornecedor_id,qtd,valor_unit,valor_total,categoria,brinde,obs,status,pedido_em,codigo_pedido,obs_cores,dtf_status,tag_status", ["formando_id", "ordem", "id"]),
     todos("pagamentos", "id,formando_id,ordem,descricao,valor,data,status,tipo,obs,recebedor", ["formando_id", "ordem", "id"]),
     todos("fornecedores", "id,nome", ["nome"]),
     todos("custos", "chave,produto,custo,venda", ["chave"]),
@@ -145,7 +145,7 @@ async function carregar() {
     const it = {
       id: r.id, fo: r.formando_id, produto: r.produto, fornId: r.fornecedor_id && SUP[r.fornecedor_id] ? r.fornecedor_id : null,
       qtd: +r.qtd || 0, vu: n(r.valor_unit), vt: n(r.valor_total), cat: CAT[r.categoria] ? r.categoria : "OUTROS",
-      brinde: !!r.brinde, obs: r.obs || "", status: r.status, pedido: r.pedido_em || "", codigo: r.codigo_pedido || "", cores: r.obs_cores || "", novo: !!r.pedido_id,
+      brinde: !!r.brinde, obs: r.obs || "", status: r.status, pedido: r.pedido_em || "", codigo: r.codigo_pedido || "", cores: r.obs_cores || "", dtf: r.dtf_status || "", tag: r.tag_status || "", novo: !!r.pedido_id,
     };
     ITEM[it.id] = it;
     (porFo[it.fo] = porFo[it.fo] || []).push(it);
@@ -202,8 +202,15 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const ehImperio = fornId => /imp[eé]rio/i.test(SUP[fornId] || "");
 // Guardanapos e bolsas (não tag, lacre ou adicional de bolsa) têm um campo próprio para as cores
 const temCores = produto => /^\s*(guardanapos?|bolsa)\b/i.test(produto || "");
+// Onde está o DTF dos copos e a tag dos guardanapos (guardanapo "sem tag" não tem)
+const DTF_LOCAL = [["PRODUCAO", "Em produção"], ["LOJA", "Em loja"]];
+const TAG_LOCAL = [["PRODUCAO", "Em produção"], ["LOJA", "Em loja"], ["COSTUREIRA", "Com a costureira"]];
+const temDtf = i => i.cat === "COPOS";
+const temTag = i => /^\s*guardanapos?\b/i.test(i.produto || "") && !/sem\s+tag/i.test(i.produto || "");
 function novoEstado(it, campo, valor) {
-  const atual = { status: it.status, fornId: it.fornId, pedido: it.pedido || "", codigo: it.codigo || "", cores: it.cores || "" };
+  const atual = { status: it.status, fornId: it.fornId, pedido: it.pedido || "", codigo: it.codigo || "", cores: it.cores || "", dtf: it.dtf || "", tag: it.tag || "" };
+  if (campo === "dtf") { if (valor && !DTF_LOCAL.some(([k]) => k === valor)) return null; return { ...atual, dtf: valor || "" }; }
+  if (campo === "tag") { if (valor && !TAG_LOCAL.some(([k]) => k === valor)) return null; return { ...atual, tag: valor || "" }; }
   if (campo === "forn") { if (valor && !SUP[valor]) return null; return { ...atual, fornId: valor || null }; }
   if (campo === "status") { if (!STATUS_LABEL[valor]) return null; return { ...atual, status: valor }; }
   if (campo === "pedido") {
@@ -229,11 +236,13 @@ function novoEstado(it, campo, valor) {
 async function gravar(it, novo) {
   const { data, error } = await sb.from("itens").update({
     status: novo.status, fornecedor_id: novo.fornId || null, pedido_em: novo.pedido || null, codigo_pedido: novo.codigo || null, obs_cores: novo.cores || null,
+    dtf_status: novo.dtf || null, tag_status: novo.tag || null,
     atualizado_em: new Date().toISOString(), atualizado_por: USER ? USER.id : null,
   }).eq("id", it.id).select("id");
   if (error) throw error;
   if (!data || !data.length) throw new Error("nada foi salvo");
   it.status = novo.status; it.fornId = novo.fornId || null; it.pedido = novo.pedido || ""; it.codigo = novo.codigo || ""; it.cores = novo.cores || "";
+  it.dtf = novo.dtf || ""; it.tag = novo.tag || "";
 }
 
 async function salvarItem(itemId, campo, valor, tr) {
@@ -374,6 +383,17 @@ function statusCell(i) {
     ${STATUS_LABEL[i.status] ? "" : `<option value="${esc(i.status)}" selected>${esc(i.status)}</option>`}
   </select>`;
 }
+// Barra de onde está o DTF (copos) ou a tag (guardanapos), embaixo do status
+function localCell(i) {
+  const [campo, rotulo, opcoes, valor] = temDtf(i) ? ["dtf", "DTF", DTF_LOCAL, i.dtf] : temTag(i) ? ["tag", "Tag", TAG_LOCAL, i.tag] : [];
+  if (!campo) return "";
+  const nome = (opcoes.find(([k]) => k === valor) || [])[1];
+  if (!LIVE) return nome ? `<span class="local-ro" data-local="${esc(valor)}">${rotulo}: ${esc(nome)}</span>` : "";
+  return `<label class="local-l">${rotulo}<select class="ed local" data-local="${esc(valor || "")}" data-item="${esc(i.id)}" data-campo="${campo}" aria-label="Onde está ${campo === "dtf" ? "o DTF" : "a tag"} de ${esc(i.produto)}">
+    <option value="">— informar —</option>
+    ${opcoes.map(([k, l]) => `<option value="${k}"${k === valor ? " selected" : ""}>${l}</option>`).join("")}
+  </select></label>`;
+}
 
 function pedidoCell(i) {
   const comCodigo = ehImperio(i.fornId) || i.codigo;
@@ -384,7 +404,7 @@ function pedidoCell(i) {
 // Mensagem de "salvo"/erro aparece embaixo do campo que foi alterado
 const flashEm = (flash, campo) => {
   if (!flash) return "";
-  const alvo = ["forn", "pedido", "codigo", "cores"].includes(flash[2]) ? flash[2] : "status";
+  const alvo = ["forn", "pedido", "codigo", "cores", "dtf", "tag"].includes(flash[2]) ? flash[2] : "status";
   return alvo === campo ? `<span class="rowmsg ${flash[0]}">${esc(flash[1])}</span>` : "";
 };
 // Observação geral + campo de cores (só guardanapos e bolsas)
@@ -405,7 +425,7 @@ function itemRow(i, flash) {
     <td class="r num">${i.vu == null ? "—" : brl(i.vu)}</td>
     <td>${fornCell(i)}${flashEm(flash, "forn")}</td>
     <td>${pedidoCell(i)}${flashEm(flash, "pedido")}${flashEm(flash, "codigo")}</td>
-    <td>${statusCell(i)}${flashEm(flash, "status")}</td>
+    <td>${statusCell(i)}${flashEm(flash, "status")}${localCell(i)}${flashEm(flash, "dtf")}${flashEm(flash, "tag")}</td>
     <td class="r num">${total}</td>
     <td class="obs">${obsCell(i, flash)}</td>
   </tr>`;
@@ -2011,7 +2031,7 @@ function prodRow(i, flash) {
     <td class="r num">${int(i.qtd)}</td>
     <td>${fornCell(i)}${flashEm(flash, "forn")}</td>
     <td>${pedidoCell(i)}${flashEm(flash, "pedido")}${flashEm(flash, "codigo")}</td>
-    <td>${statusCell(i)}${flashEm(flash, "status")}</td>
+    <td>${statusCell(i)}${flashEm(flash, "status")}${localCell(i)}${flashEm(flash, "dtf")}${flashEm(flash, "tag")}</td>
     <td class="obs">${obsCell(i, flash)}</td>
   </tr>`;
 }

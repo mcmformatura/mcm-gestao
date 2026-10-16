@@ -19,7 +19,7 @@ Painel da MCM Formatura para acompanhar eventos, formandos, itens de produção,
 - **Resumo do mês**: cada produto somado em todos os eventos do mês escolhido.
 - **Estoque de copos**: entradas e saídas de copos e taças, estoque mínimo e quanto falta comprar para os pedidos (tabelas `estoque_movimentos` e `copos_config`).
 - **Estoque geral**: estoque de cada produto × itens dos pedidos que ainda não estão prontos, com a lista do que falta pedir por fornecedor (tabela `estoque_geral`).
-- **Pastas dos eventos**: agrupadas por mês, com cada formando, seus itens, fornecedor, status e pagamentos. Na ficha de cada cliente dá para lançar pagamento (valor, data, para quem foi pago, situação e observação), marcar um previsto como pago e apagar um lançamento. Itens da Império têm o campo **nº do pedido** ao lado da data do pedido (também em lote na aba Produção) e a busca acha pelo número. Guardanapos e bolsas têm também o campo **Cores** na coluna de observação, na ficha e na aba Produção (a busca da produção acha pela cor). Cada categoria da ficha termina com um espaço de **observação final**, que também pode ser preenchido por setor no Novo pedido.
+- **Pastas dos eventos**: agrupadas por mês, com cada formando, seus itens, fornecedor, status e pagamentos. Na ficha de cada cliente dá para lançar pagamento (valor, data, para quem foi pago, situação e observação), marcar um previsto como pago e apagar um lançamento. Itens da Império têm o campo **nº do pedido** ao lado da data do pedido (também em lote na aba Produção) e a busca acha pelo número. Guardanapos e bolsas têm também o campo **Cores** na coluna de observação, na ficha e na aba Produção (a busca da produção acha pela cor). Copos têm a barra **DTF** (em produção / em loja) e guardanapos com tag têm a barra **Tag** (em produção / em loja / com a costureira), embaixo do status. Cada categoria da ficha termina com um espaço de **observação final**, que também pode ser preenchido por setor no Novo pedido.
 
 ## Telas de acesso
 
@@ -60,7 +60,7 @@ Depois abra http://localhost:5173. Opções no endereço:
 
 ## Publicar
 
-1. No Supabase: rodar os arquivos de `supabase/` em ordem (`001_estrutura.sql`, `002_administradores.sql`, `003_estoque.sql`, `004_pagamentos_recebedor.sql`, `005_codigo_pedido.sql`, `006_obs_cores.sql`, `007_obs_categorias.sql`), importar os dados e cadastrar os e-mails da equipe em `membros`.
+1. No Supabase: rodar os arquivos de `supabase/` em ordem (`001_estrutura.sql`, `002_administradores.sql`, `003_estoque.sql`, `004_pagamentos_recebedor.sql`, `005_codigo_pedido.sql`, `006_obs_cores.sql`, `007_obs_categorias.sql`, `008_dtf_tag.sql`), importar os dados e cadastrar os e-mails da equipe em `membros`.
 2. Na Vercel: **Add New → Project → Import** deste repositório. Framework Preset: **Other**. O `vercel.json` já define o build e a pasta `dist`. Cadastre as variáveis de ambiente antes do primeiro deploy.
 3. No Supabase, em Authentication → URL Configuration: colocar o endereço da Vercel em **Site URL** e em **Redirect URLs**, para o link de recuperação voltar ao site.
 4. Em Authentication → Email Templates → Reset Password: incluir `{{ .Token }}` para o e-mail trazer também o código.
