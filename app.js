@@ -202,16 +202,23 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const ehImperio = fornId => /imp[eé]rio/i.test(SUP[fornId] || "");
 // Guardanapos e bolsas (não tag, lacre, adicional de bolsa nem bolsa cartonada) têm um campo próprio para as cores
 const temCores = produto => /^\s*(guardanapos?|bolsa)\b/i.test(produto || "") && !/cartonad/i.test(produto || "");
-// Onde está o DTF (copos, gloss/lip balm, pulseira de LED, bolsas e necessaire Letícia) e a tag dos guardanapos (guardanapo "sem tag" não tem)
+// Onde está o DTF (copos, copo cuia/térmico, gloss/lip balm, pulseira de LED, bolsas e necessaire Letícia) e a tag dos guardanapos (guardanapo "sem tag" não tem)
 const DTF_COPOS = [["PRODUCAO", "Em produção"], ["LOJA", "Em loja"]];
 const DTF_COSTURA = [...DTF_COPOS, ["COSTUREIRO", "Com o costureiro"]];
 const TAG_LOCAL = [["PRODUCAO", "Em produção"], ["LOJA", "Em loja"], ["COSTUREIRA", "Com a costureira"]];
 const ehBolsaOuLeticia = p => (/^\s*bolsas?\b/i.test(p) && !/cartonad/i.test(p)) || /^\s*n[e]?cessaire\s+let[ií]cia/i.test(p);
 const ehGloss = p => /^\s*(gloss|lip\s*b)/i.test(p);
 const ehPulseiraLed = p => /pulseiras?\s+(de\s+)?led/i.test(p);
+// Copo cuia e copo térmico (lançados em lembranças); "copo de leite" é flor e fica de fora
+const ehCopoCuiaTermico = p => /^\s*copos?\b.*(cuia|t[eé]rmic)/i.test(p);
 // Bastão de LED leva adesivo (não DTF), mesmo quando lançado em copos
 const ehBastaoLed = p => /bast(ão|ao|ões|oes)\s+(de\s+)?led/i.test(p);
-const opcoesDtf = i => ehBastaoLed(i.produto || "") ? null : i.cat === "COPOS" || ehGloss(i.produto || "") || ehPulseiraLed(i.produto || "") ? DTF_COPOS : ehBolsaOuLeticia(i.produto || "") ? DTF_COSTURA : null;
+const opcoesDtf = i => {
+  const p = i.produto || "";
+  if (ehBastaoLed(p)) return null;
+  if (i.cat === "COPOS" || ehCopoCuiaTermico(p) || ehGloss(p) || ehPulseiraLed(p)) return DTF_COPOS;
+  return ehBolsaOuLeticia(p) ? DTF_COSTURA : null;
+};
 const temTag = i => /^\s*guardanapos?\b/i.test(i.produto || "") && !/sem\s+tag/i.test(i.produto || "");
 // Menu provençal: se já está com o tassel
 const TASSEL_LOCAL = [["COM", "Já está com tassel"], ["SEM", "Ainda sem tassel"]];
