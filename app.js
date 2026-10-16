@@ -80,6 +80,8 @@ let F = [];                 // formandos com itens e pagamentos
 let ITEM = {};              // id -> item
 let FO_INFO = {};           // id do formando -> { nome, ev }
 const PEDIDOS = {};         // id do pedido -> pedido lançado pelo painel
+const OBS_CAT = {};         // "formando|CATEGORIA" -> observação final da categoria
+const chaveObsCat = (fo, cat) => `${fo}|${cat}`;
 
 function recalc(f) {
   f.itens.forEach(i => { i.escolher = !i.fornId && PRODUCAO.has(i.cat); });
@@ -106,7 +108,7 @@ async function todos(tabela, colunas, ordem) {
 }
 
 async function carregar() {
-  const [evs, fos, its, pgs, sups, cus, peds, movs, cfgs, egs] = await Promise.all([
+  const [evs, fos, its, pgs, sups, cus, peds, movs, cfgs, egs, ocs] = await Promise.all([
     todos("eventos", "id,nome,data,slug,ordem", ["ordem", "data", "nome"]),
     todos("formandos", "id,evento_id,nome", ["nome", "id"]),
     todos("itens", "id,formando_id,pedido_id,ordem,produto,fornecedor_id,qtd,valor_unit,valor_total,categoria,brinde,obs,status,pedido_em,codigo_pedido,obs_cores", ["formando_id", "ordem", "id"]),
@@ -117,6 +119,7 @@ async function carregar() {
     todos("estoque_movimentos", "id,modelo,tipo,qtd,data,obs,criado_em", ["data", "criado_em"]),
     todos("copos_config", "chave,nome,minimo", ["chave"]),
     todos("estoque_geral", "chave,produto,categoria,qtd,minimo,avulso", ["chave"]),
+    todos("obs_categorias", "formando_id,categoria,obs", ["formando_id", "categoria"]),
   ]);
   const n = v => v == null ? null : +v;
 
@@ -130,7 +133,8 @@ async function carregar() {
   Object.keys(CUSTOS).forEach(k => { delete CUSTOS[k]; });
   cus.forEach(c => { CUSTOS[c.chave] = { produto: c.produto, custo: n(c.custo), venda: n(c.venda) }; });
 
-  [MOVS, COPOS_CFG, EGERAL].forEach(o => Object.keys(o).forEach(k => { delete o[k]; }));
+  [MOVS, COPOS_CFG, EGERAL, OBS_CAT].forEach(o => Object.keys(o).forEach(k => { delete o[k]; }));
+  ocs.forEach(o => { OBS_CAT[chaveObsCat(o.formando_id, o.categoria)] = o.obs || ""; });
   movs.forEach(m => { MOVS[m.id] = { modelo: m.modelo, tipo: m.tipo, qtd: +m.qtd || 0, data: m.data, obs: m.obs || "", em: m.criado_em }; });
   cfgs.forEach(c => { COPOS_CFG[c.chave] = { nome: c.nome, minimo: n(c.minimo) }; });
   egs.forEach(e => { EGERAL[e.chave] = { produto: e.produto, cat: e.categoria, qtd: n(e.qtd), minimo: n(e.minimo), custom: !!e.avulso }; });
@@ -419,8 +423,44 @@ function itemRows(f, filtro) {
     const sub = g.reduce((a, i) => a + (i.vt || 0), 0);
     out.push(`<tr class="grp"><td colspan="6">${CAT[c]} · ${g.length} ${g.length > 1 ? "itens" : "item"}</td><td class="r num">${brl(sub)}</td><td></td></tr>`);
     g.forEach(i => out.push(itemRow(i)));
+    out.push(obsCatRow(f.id, c));
   });
   return out.join("");
+}
+
+// Observação final de cada categoria, embaixo dos itens dela na ficha do cliente
+function obsCatRow(fo, c, msg) {
+  const v = OBS_CAT[chaveObsCat(fo, c)] || "";
+  if (!LIVE && !v) return "";
+  const campo = !LIVE
+    ? `<span class="obscat-ro">${esc(v)}</span>`
+    : `<textarea class="obscat${v ? " has" : ""}" data-obscat="${esc(c)}" data-fo="${esc(fo)}" rows="${Math.min(6, Math.max(2, v.split("
+").length))}" maxlength="1000" placeholder="Observação final de ${esc(CAT[c].toLowerCase())}: cores, combinações, detalhes de entrega…" aria-label="Observação final de ${esc(CAT[c])}">${esc(v)}</textarea>`;
+  return `<tr class="obs-cat" data-obscat-row="${esc(c)}"><td colspan="8"><span class="obscat-l">Observação final · ${CAT[c]}</span>${campo}${msg ? `<span class="rowmsg ${msg[0]}">${esc(msg[1])}</span>` : ""}</td></tr>`;
+}
+async function gravarObsCat(fo, c, valor) {
+  const obs = String(valor || "").trim();
+  if (obs.length > 1000) throw new Error("observação muito longa (máximo 1000 caracteres)");
+  const q = obs
+    ? sb.from("obs_categorias").upsert({ formando_id: fo, categoria: c, obs, atualizado_em: new Date().toISOString(), atualizado_por: USER ? USER.id : null }, { onConflict: "formando_id,categoria" })
+    : sb.from("obs_categorias").delete().eq("formando_id", fo).eq("categoria", c);
+  const { error } = await q;
+  if (error) throw error;
+  if (obs) OBS_CAT[chaveObsCat(fo, c)] = obs; else delete OBS_CAT[chaveObsCat(fo, c)];
+}
+async function salvarObsCat(el) {
+  const fo = el.dataset.fo, c = el.dataset.obscat;
+  if (!LIVE || !SAFE_ID.test(fo) || !CAT[c]) return;
+  if (String(el.value).trim() === (OBS_CAT[chaveObsCat(fo, c)] || "")) return;
+  const tr = el.closest("tr");
+  el.disabled = true;
+  let msg;
+  try { await gravarObsCat(fo, c, el.value); msg = ["ok", "salvo"]; }
+  catch (e) { msg = ["err", erroDb(e)]; }
+  const tmp = document.createElement("tbody");
+  tmp.innerHTML = obsCatRow(fo, c, msg);
+  if (msg[0] === "err") tmp.querySelector("textarea").value = el.value;   // não perde o que foi digitado
+  tr.replaceWith(tmp.firstElementChild);
 }
 
 // Para quem foi pago: sugestões a partir do que já foi lançado
@@ -668,7 +708,7 @@ function render() {
 /* ---------- Novo pedido: lançamento por setor ---------- */
 const SETORES = ["PAPELARIA", "LEMBRANCAS", "COPOS", "DOCES", "MONTAGEM"];
 const linhaVazia = () => ({ produto: "", qtd: "", vu: "", fornId: "", obs: "" });
-const novoRascunho = (evId = "") => ({ evId, evNome: "", evData: "", foNome: "", linhas: Object.fromEntries(SETORES.map(c => [c, [linhaVazia()]])) });
+const novoRascunho = (evId = "") => ({ evId, evNome: "", evData: "", foNome: "", linhas: Object.fromEntries(SETORES.map(c => [c, [linhaVazia()]])), obsCat: {} });
 let RASC = (() => {
   try { const r = JSON.parse(localStorage.getItem("mcm-rascunho-pedido") || "null"); if (r && r.linhas) return r; } catch (e) {}
   return novoRascunho();
@@ -729,6 +769,7 @@ function setorHtml(c) {
       <tbody id="rows_${c}">${RASC.linhas[c].map((l, k) => linhaHtml(c, k, l)).join("")}</tbody>
     </table></div>
     <div><button type="button" class="btn" data-add="${c}"${LIVE ? "" : " disabled"}>+ Adicionar item de ${CAT[c].toLowerCase()}</button></div>
+    <div class="field np-obscat"><label for="obscat_${c}">Observação final de ${CAT[c].toLowerCase()}</label><textarea id="obscat_${c}" data-np-obscat="${c}" rows="2" maxlength="1000" placeholder="Cores, combinações, detalhes de entrega…"${LIVE ? "" : " disabled"}>${esc((RASC.obsCat || {})[c] || "")}</textarea></div>
     <datalist id="dl_${c}">${(SUGEST[c] || []).map(s => `<option value="${esc(s.nome)}">${s.preco != null ? esc(brl(s.preco)) : ""}</option>`).join("")}</datalist>
   </section>`;
 }
@@ -811,6 +852,8 @@ function wireNovo() {
   document.getElementById("npfo").addEventListener("input", e => { RASC.foNome = e.target.value; guardarRascunho(); atualizarFormando(); });
 
   form.addEventListener("input", e => {
+    const oc = e.target.closest("textarea[data-np-obscat]");
+    if (oc) { (RASC.obsCat = RASC.obsCat || {})[oc.dataset.npObscat] = oc.value; guardarRascunho(); return; }
     const inp = e.target.closest("tr[data-cat] .np-in");
     if (!inp) return;
     const tr = inp.closest("tr"), c = tr.dataset.cat, k = +tr.dataset.k;
@@ -897,13 +940,25 @@ async function salvarPedido() {
     const { data: pid, error } = await sb.rpc("criar_pedido", { p: doc });
     if (error) throw error;
     await carregar();
+    // Observação final de cada setor com itens: vai para a ficha do cliente (somada à que já existia)
+    const foId = PEDIDOS[pid] && PEDIDOS[pid].itens.length ? PEDIDOS[pid].itens[0].fo : null;
+    let avisoObs = "";
+    if (foId) {
+      for (const c of SETORES) {
+        const nova = String((RASC.obsCat || {})[c] || "").trim();
+        if (!nova || !itens.some(i => i.cat === c)) continue;
+        const antes = OBS_CAT[chaveObsCat(foId, c)] || "";
+        try { await gravarObsCat(foId, c, antes ? `${antes}\n${nova}` : nova); }
+        catch (e) { avisoObs += ` A observação final de ${CAT[c].toLowerCase()} não foi salva (${erroDb(e)}): escreva de novo na ficha do cliente.`; }
+      }
+    }
     const evId = PEDIDOS[pid] && PEDIDOS[pid].evento.id ? PEDIDOS[pid].evento.id : evento.id;
     const evSlug = (EVENTOS.find(e => e.id === evId) || {}).slug;
     RASC = novoRascunho(evId || ""); guardarRascunho();
     renderFolders(); renderNovo();
     const m = document.getElementById("npmsg");
-    m.className = "np-msg ok";
-    m.innerHTML = `Pedido salvo: ${itens.length} ${itens.length > 1 ? "itens" : "item"} para <b>${esc(foNome)}</b> (${esc(evento.nome)}), ${brl(total)}. ${evSlug ? `<button type="button" class="btn" id="npver">Abrir a pasta do evento</button>` : ""}`;
+    m.className = avisoObs ? "np-msg err" : "np-msg ok";
+    m.innerHTML = `Pedido salvo: ${itens.length} ${itens.length > 1 ? "itens" : "item"} para <b>${esc(foNome)}</b> (${esc(evento.nome)}), ${brl(total)}.${esc(avisoObs)} ${evSlug ? `<button type="button" class="btn" id="npver">Abrir a pasta do evento</button>` : ""}`;
     const ver = document.getElementById("npver");
     if (ver) ver.addEventListener("click", () => { aba = "formandos"; abrir(evSlug); });
   } catch (e) {
@@ -2099,6 +2154,8 @@ function wireList() {
   document.getElementById("expand").addEventListener("click", () => list.querySelectorAll("details.fo").forEach(d => { d.open = true; }));
   document.getElementById("collapse").addEventListener("click", () => list.querySelectorAll("details.fo").forEach(d => { d.open = false; }));
   list.addEventListener("change", ev => {
+    const oc = ev.target.closest("textarea[data-obscat]");
+    if (oc) { salvarObsCat(oc); return; }
     const s = ev.target.closest(".ed");
     if (!s) return;
     const tr = s.closest("tr");

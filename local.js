@@ -75,7 +75,7 @@
       if (!u.membro) return { data: [], error: null };            // igual ao RLS: quem não é membro não vê nada
       const db = await banco();
       // Tabelas de estoque criadas depois da cópia dos dados: começam vazias
-      if (!db[tabela] && ["estoque_movimentos", "copos_config", "estoque_geral"].includes(tabela)) db[tabela] = [];
+      if (!db[tabela] && ["estoque_movimentos", "copos_config", "estoque_geral", "obs_categorias"].includes(tabela)) db[tabela] = [];
       const linhas = db[tabela];
       if (!linhas) return { data: null, error: { message: `tabela ${tabela} não existe` } };
       const passa = r => filtros.every(([c, v, tipo]) => tipo === "in" ? v.includes(r[c]) : r[c] === v);
@@ -100,8 +100,8 @@
         return { data: devolver ? alvo.map(r => ({ id: r.id })) : null, error: null };
       }
       if (op === "upsert") {
-        const chave = ["custos", "copos_config", "estoque_geral"].includes(tabela) ? "chave" : "id";
-        const i = linhas.findIndex(r => r[chave] === payload[chave]);
+        const chaves = tabela === "obs_categorias" ? ["formando_id", "categoria"] : ["custos", "copos_config", "estoque_geral"].includes(tabela) ? ["chave"] : ["id"];
+        const i = linhas.findIndex(r => chaves.every(k => r[k] === payload[k]));
         if (i >= 0) Object.assign(linhas[i], copia(payload)); else linhas.push(copia(payload));
         salvar();
         return { data: null, error: null };
