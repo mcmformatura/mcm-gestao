@@ -200,16 +200,18 @@ function erroDb(e) {
 const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
 // Fornecedor que trabalha com número de pedido (a Império manda um código para cada pedido)
 const ehImperio = fornId => /imp[eé]rio/i.test(SUP[fornId] || "");
-// Guardanapos e bolsas (não tag, lacre ou adicional de bolsa) têm um campo próprio para as cores
-const temCores = produto => /^\s*(guardanapos?|bolsa)\b/i.test(produto || "");
-// Onde está o DTF dos copos e a tag dos guardanapos (guardanapo "sem tag" não tem)
-const DTF_LOCAL = [["PRODUCAO", "Em produção"], ["LOJA", "Em loja"]];
+// Guardanapos e bolsas (não tag, lacre, adicional de bolsa nem bolsa cartonada) têm um campo próprio para as cores
+const temCores = produto => /^\s*(guardanapos?|bolsa)\b/i.test(produto || "") && !/cartonad/i.test(produto || "");
+// Onde está o DTF (copos, bolsas e necessaire Letícia) e a tag dos guardanapos (guardanapo "sem tag" não tem)
+const DTF_COPOS = [["PRODUCAO", "Em produção"], ["LOJA", "Em loja"]];
+const DTF_COSTURA = [...DTF_COPOS, ["COSTUREIRO", "Com o costureiro"]];
 const TAG_LOCAL = [["PRODUCAO", "Em produção"], ["LOJA", "Em loja"], ["COSTUREIRA", "Com a costureira"]];
-const temDtf = i => i.cat === "COPOS";
+const ehBolsaOuLeticia = p => (/^\s*bolsas?\b/i.test(p) && !/cartonad/i.test(p)) || /^\s*n[e]?cessaire\s+let[ií]cia/i.test(p);
+const opcoesDtf = i => i.cat === "COPOS" ? DTF_COPOS : ehBolsaOuLeticia(i.produto || "") ? DTF_COSTURA : null;
 const temTag = i => /^\s*guardanapos?\b/i.test(i.produto || "") && !/sem\s+tag/i.test(i.produto || "");
 function novoEstado(it, campo, valor) {
   const atual = { status: it.status, fornId: it.fornId, pedido: it.pedido || "", codigo: it.codigo || "", cores: it.cores || "", dtf: it.dtf || "", tag: it.tag || "" };
-  if (campo === "dtf") { if (valor && !DTF_LOCAL.some(([k]) => k === valor)) return null; return { ...atual, dtf: valor || "" }; }
+  if (campo === "dtf") { if (valor && !(opcoesDtf(it) || []).some(([k]) => k === valor)) return null; return { ...atual, dtf: valor || "" }; }
   if (campo === "tag") { if (valor && !TAG_LOCAL.some(([k]) => k === valor)) return null; return { ...atual, tag: valor || "" }; }
   if (campo === "forn") { if (valor && !SUP[valor]) return null; return { ...atual, fornId: valor || null }; }
   if (campo === "status") { if (!STATUS_LABEL[valor]) return null; return { ...atual, status: valor }; }
@@ -385,7 +387,7 @@ function statusCell(i) {
 }
 // Barra de onde está o DTF (copos) ou a tag (guardanapos), embaixo do status
 function localCell(i) {
-  const [campo, rotulo, opcoes, valor] = temDtf(i) ? ["dtf", "DTF", DTF_LOCAL, i.dtf] : temTag(i) ? ["tag", "Tag", TAG_LOCAL, i.tag] : [];
+  const [campo, rotulo, opcoes, valor] = opcoesDtf(i) ? ["dtf", "DTF", opcoesDtf(i), i.dtf] : temTag(i) ? ["tag", "Tag", TAG_LOCAL, i.tag] : [];
   if (!campo) return "";
   const nome = (opcoes.find(([k]) => k === valor) || [])[1];
   if (!LIVE) return nome ? `<span class="local-ro" data-local="${esc(valor)}">${rotulo}: ${esc(nome)}</span>` : "";
