@@ -488,6 +488,7 @@ function itemRow(i, flash) {
     <td>${statusCell(i)}${flashEm(flash, "status")}${localCell(i, flash)}</td>
     <td class="r num">${total}</td>
     <td class="obs">${obsCell(i, flash)}</td>
+    <td class="del">${LIVE ? `<button class="btn x" type="button" data-itdel="${esc(i.id)}" title="Excluir item do pedido" aria-label="Excluir ${esc(i.produto)} do pedido">×</button>` : ""}</td>
   </tr>`;
 }
 
@@ -495,13 +496,13 @@ function itemRows(f, filtro) {
   let itens = f.itens;
   if (filtro === "escolher") itens = itens.filter(i => i.escolher);
   if (STATUS_LABEL[filtro]) itens = itens.filter(i => i.status === filtro);
-  if (!itens.length) return `<tr><td colspan="8" class="muted">Nenhum item com esse filtro.</td></tr>`;
+  if (!itens.length) return `<tr><td colspan="9" class="muted">Nenhum item com esse filtro.</td></tr>`;
   const out = [];
   CAT_ORDER.forEach(c => {
     const g = itens.filter(i => i.cat === c);
     if (!g.length) return;
     const sub = g.reduce((a, i) => a + (i.vt || 0), 0);
-    out.push(`<tr class="grp"><td colspan="6">${CAT[c]} · ${g.length} ${g.length > 1 ? "itens" : "item"}</td><td class="r num">${brl(sub)}</td><td></td></tr>`);
+    out.push(`<tr class="grp"><td colspan="6">${CAT[c]} · ${g.length} ${g.length > 1 ? "itens" : "item"}</td><td class="r num">${brl(sub)}</td><td></td><td></td></tr>`);
     g.forEach(i => out.push(itemRow(i)));
     out.push(obsCatRow(f.id, c));
   });
@@ -515,7 +516,7 @@ function obsCatRow(fo, c, msg) {
   const campo = !LIVE
     ? `<span class="obscat-ro">${esc(v)}</span>`
     : `<textarea class="obscat${v ? " has" : ""}" data-obscat="${esc(c)}" data-fo="${esc(fo)}" rows="${Math.min(6, Math.max(2, v.split("\n").length))}" maxlength="1000" placeholder="Observação final de ${esc(CAT[c].toLowerCase())}: cores, combinações, detalhes de entrega…" aria-label="Observação final de ${esc(CAT[c])}">${esc(v)}</textarea>`;
-  return `<tr class="obs-cat" data-obscat-row="${esc(c)}"><td colspan="8"><div class="obscat-w"><span class="obscat-l">Observação final · ${CAT[c]}</span>${campo}${msg ? `<span class="rowmsg ${msg[0]}">${esc(msg[1])}</span>` : ""}</div></td></tr>`;
+  return `<tr class="obs-cat" data-obscat-row="${esc(c)}"><td colspan="9"><div class="obscat-w"><span class="obscat-l">Observação final · ${CAT[c]}</span>${campo}${msg ? `<span class="rowmsg ${msg[0]}">${esc(msg[1])}</span>` : ""}</div></td></tr>`;
 }
 async function gravarObsCat(fo, c, valor) {
   const obs = String(valor || "").trim();
@@ -612,6 +613,47 @@ async function salvarPagamento(form) {
     redesenharPagamentos(f, `${tipo === "DESCONTO" ? "Desconto" : "Pagamento"} de ${brl(valor)} lançado.`);
   } catch (err) { btn.disabled = false; erro(erroDb(err)); }
 }
+// Excluir item do pedido (com confirmação); o banco guarda uma cópia na lixeira (itens_excluidos)
+async function excluirItem(btn, filtro) {
+  const id = btn.dataset.itdel, it = ITEM[id];
+  if (!it || !LIVE || !SAFE_ID.test(id)) return;
+  const f = F.find(x => x.id === it.fo);
+  if (btn.dataset.conf !== "1") {
+    btn.dataset.conf = "1"; btn.textContent = "excluir?"; btn.classList.add("bad");
+    btn.title = `Clique de novo para excluir ${it.produto}${it.vt ? ` (${brl(it.vt)})` : ""}`;
+    setTimeout(() => { if (btn.isConnected && btn.dataset.conf === "1") { btn.dataset.conf = ""; btn.textContent = "×"; btn.classList.remove("bad"); btn.title = "Excluir item do pedido"; } }, 5000);
+    return;
+  }
+  btn.disabled = true;
+  const tr = btn.closest("tr");
+  try {
+    const { data, error } = await sb.from("itens").delete().eq("id", id).select("id");
+    if (error) throw error;
+    if (!data || !data.length) throw new Error("nada foi salvo");
+    if (f) f.itens = f.itens.filter(i => i.id !== id);
+    Object.values(PEDIDOS).forEach(p => { if (p.itens) p.itens = p.itens.filter(i => i.id !== id); });
+    sel.delete(id);
+    delete ITEM[id];
+    if (f) {
+      recalc(f);
+      const det = document.querySelector(`details.fo[data-id="${CSS.escape(f.id)}"]`);
+      if (det) {
+        det.querySelector(":scope > summary").innerHTML = foSummary(f, atual === "geral");
+        const tb = det.querySelector("tbody");
+        if (tb) tb.innerHTML = itemRows(f, filtro);
+        const box = det.querySelector(".pays .hint:last-child");
+        if (box) box.innerHTML = `Total ${brl(f.total)}${f.desconto ? ` − desconto ${brl(f.desconto)}` : ""} · recebido ${brl(f.pago)} · saldo <b class="num">${brl(f.saldo)}</b>`;
+        const msg = document.createElement("p"); msg.className = "rowmsg ok it-del-msg"; msg.textContent = `${it.produto} excluído do pedido.`;
+        det.querySelector(".body").prepend(msg); setTimeout(() => msg.remove(), 4000);
+      }
+    }
+    refreshResumo();
+  } catch (err) {
+    btn.disabled = false; btn.textContent = "×"; btn.dataset.conf = ""; btn.classList.remove("bad");
+    if (tr) { const td = tr.querySelector("td.del"); td.insertAdjacentHTML("beforeend", `<span class="rowmsg err">${esc(erroDb(err))}</span>`); }
+  }
+}
+
 async function acaoPagamento(btn) {
   const det = btn.closest("details.fo"), f = det && F.find(x => x.id === det.dataset.id);
   if (!f || !LIVE) return;
@@ -659,7 +701,7 @@ function foCard(f, filtro, mostraEvento) {
     <summary>${foSummary(f, mostraEvento)}</summary>
     <div class="body">
       <div class="tablebox"><table>
-        <thead><tr><th>Item</th><th class="r">Qtd</th><th class="r">Valor un.</th><th>Fornecedor</th><th>Pedido ao fornecedor</th><th>Status</th><th class="r">Total</th><th>Observação</th></tr></thead>
+        <thead><tr><th>Item</th><th class="r">Qtd</th><th class="r">Valor un.</th><th>Fornecedor</th><th>Pedido ao fornecedor</th><th>Status</th><th class="r">Total</th><th>Observação</th><th class="del"><span class="sr">Excluir</span></th></tr></thead>
         <tbody>${itemRows(f, filtro)}</tbody>
       </table></div>
       <div class="pays"><h3>Pagamentos</h3>${payList(f)}
@@ -2242,7 +2284,10 @@ function wireList() {
     salvarItem(s.dataset.item, s.dataset.campo, s.value, tr);
   });
   list.addEventListener("submit", ev => { const fm = ev.target.closest("form[data-pgform]"); if (fm) { ev.preventDefault(); salvarPagamento(fm); } });
-  list.addEventListener("click", ev => { const b = ev.target.closest("[data-pgdel], [data-pgpago]"); if (b) acaoPagamento(b); });
+  list.addEventListener("click", ev => {
+    const b = ev.target.closest("[data-pgdel], [data-pgpago]"); if (b) { acaoPagamento(b); return; }
+    const d = ev.target.closest("[data-itdel]"); if (d) excluirItem(d, sit.value);
+  });
   garantirListaRecebedor();
   draw();
 }

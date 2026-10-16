@@ -383,6 +383,12 @@ details.fo.achado { box-shadow: 0 0 0 3px var(--accent-soft); }
 .ag-mais > summary h3 { margin: 0; }
 @media (max-width: 760px) { .ag-row { grid-template-columns: 64px minmax(0, 1fr); } .ag-prod, .ag-chips, .ag-act { grid-column: 2; justify-items: start; } }
 
+/* Excluir item do pedido */
+th.del, td.del { width: 1%; white-space: nowrap; text-align: right; }
+td.del .btn.x { font-size: 0.9rem; padding: 2px 8px; }
+td.del .btn.x.bad { color: var(--bad); border-color: var(--bad); font-size: 0.78rem; }
+.it-del-msg { margin: 0 0 6px; }
+
 /* Pagamentos na ficha do cliente */
 .pays li { grid-template-columns: 84px minmax(0, 1fr) auto auto; }
 .pg-para { color: var(--accent); font-weight: 600; }
