@@ -61,7 +61,7 @@ Depois abra http://localhost:5173. Opções no endereço:
 
 ## Publicar
 
-1. No Supabase: rodar os arquivos de `supabase/` em ordem (`001_estrutura.sql`, `002_administradores.sql`, `003_estoque.sql`, `004_pagamentos_recebedor.sql`, `005_codigo_pedido.sql`, `006_obs_cores.sql`, `007_obs_categorias.sql`, `008_dtf_tag.sql`, `009_dtf_costureiro.sql`, `010_tassel.sql`, `011_solicitado_cliente.sql`, `012_separado_loja.sql`, `013_adesivo.sql`, `014_link_drive.sql`, `015_itens_excluidos.sql`), importar os dados e cadastrar os e-mails da equipe em `membros`.
+1. No Supabase: rodar os arquivos de `supabase/` em ordem (`001_estrutura.sql`, `002_administradores.sql`, `003_estoque.sql`, `004_pagamentos_recebedor.sql`, `005_codigo_pedido.sql`, `006_obs_cores.sql`, `007_obs_categorias.sql`, `008_dtf_tag.sql`, `009_dtf_costureiro.sql`, `010_tassel.sql`, `011_solicitado_cliente.sql`, `012_separado_loja.sql`, `013_adesivo.sql`, `014_link_drive.sql`, `015_itens_excluidos.sql`, `016_lixeira_sem_rpc.sql`), importar os dados e cadastrar os e-mails da equipe em `membros`.
 2. Na Vercel: **Add New → Project → Import** deste repositório. Framework Preset: **Other**. O `vercel.json` já define o build e a pasta `dist`. Cadastre as variáveis de ambiente antes do primeiro deploy.
 3. No Supabase, em Authentication → URL Configuration: colocar o endereço da Vercel em **Site URL** e em **Redirect URLs**, para o link de recuperação voltar ao site.
 4. Em Authentication → Email Templates → Reset Password: incluir `{{ .Token }}` para o e-mail trazer também o código.
