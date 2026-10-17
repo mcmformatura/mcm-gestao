@@ -383,6 +383,15 @@ details.fo.achado { box-shadow: 0 0 0 3px var(--accent-soft); }
 .ag-mais > summary h3 { margin: 0; }
 @media (max-width: 760px) { .ag-row { grid-template-columns: 64px minmax(0, 1fr); } .ag-prod, .ag-chips, .ag-act { grid-column: 2; justify-items: start; } }
 
+/* Renomear pasta no título */
+.ev-tit { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ev-tit .btn { font-size: 0.8rem; padding: 4px 10px; }
+.ev-ren { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ev-ren input { font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); min-width: 0; }
+.ev-ren input[name="nome"] { flex: 1 1 260px; font-size: 1.1rem; font-weight: 600; }
+.ev-ren input[name="mes"] { width: 180px; }
+.ev-ren input[name="dia"] { width: 70px; }
+
 /* Excluir item do pedido */
 th.del, td.del { width: 1%; white-space: nowrap; text-align: right; }
 td.del .btn.x { font-size: 0.9rem; padding: 2px 8px; }

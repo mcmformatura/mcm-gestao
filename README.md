@@ -13,6 +13,7 @@ Painel da MCM Formatura para acompanhar eventos, formandos, itens de produção,
 - **Novo pedido**: lança itens por setor (papelaria, lembranças, copos, doces, montagem).
 - **Próximas entregas** (página inicial): turmas pela data de entrega, com atrasadas, próximos 7 e 30 dias, produção pronta, fornecedor a escolher e saldo a receber; botão para dar baixa de entrega na turma inteira.
 - **Busca rápida** no topo (atalho /): acha cliente ou turma e abre direto a ficha.
+- **Renomear pasta**: dentro de cada pasta de turma, o botão "Renomear pasta" ao lado do título muda nome, mês e dia (o link da pasta continua o mesmo).
 - **Organizar pedidos**: cria turmas em cada mês, renomeia, muda o mês/dia, exclui turmas vazias e move clientes entre turmas (um a um ou vários marcados de uma vez). Cada turma é uma pasta do menu.
 - **Visão geral**: eventos, recebimentos e status da produção do mês escolhido no seletor **Período** do topo.
 - **Itens e lucro**: preço de venda × custo do fornecedor por produto, no mês escolhido.

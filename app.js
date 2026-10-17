@@ -766,6 +766,46 @@ const toolsHtml = ph => `<div class="tools">
   <button class="btn" type="button" id="collapse">Fechar todos</button>
 </div>`;
 
+// Renomear a pasta (turma) no próprio título: nome, mês e dia; o endereço da pasta não muda
+function wireRenomear(e) {
+  const head = document.getElementById("evhead");
+  document.getElementById("evren").addEventListener("click", () => {
+    const iso = isoDe(e);
+    head.innerHTML = `<span class="eyebrow">Renomear pasta</span>
+      <form class="ev-ren" id="evrenf" novalidate>
+        <input name="nome" value="${esc(e.nome)}" maxlength="80" aria-label="Nome da pasta" required>
+        <input name="mes" type="month" value="${iso.slice(0, 7)}" aria-label="Mês">
+        <input name="dia" type="number" min="1" max="31" value="${iso ? +iso.slice(8, 10) : ""}" placeholder="dia" aria-label="Dia">
+        <button class="btn primary" type="submit">Salvar</button>
+        <button class="btn" type="button" data-cancelar>Cancelar</button>
+        <span class="rowmsg" id="evrenmsg" role="status"></span>
+      </form>`;
+    const f = document.getElementById("evrenf"), m = document.getElementById("evrenmsg");
+    f.elements.nome.focus(); f.elements.nome.select();
+    f.querySelector("[data-cancelar]").addEventListener("click", () => render());
+    f.addEventListener("keydown", ev => { if (ev.key === "Escape") render(); });
+    f.addEventListener("submit", async ev => {
+      ev.preventDefault();
+      const nome = f.elements.nome.value.trim().replace(/\s+/g, " "), mes = f.elements.mes.value, dia = Math.round(num(f.elements.dia.value) || 0);
+      const erro = t => { m.className = "rowmsg err"; m.textContent = t; };
+      if (!nome) return erro("Dê um nome para a pasta.");
+      if (dia && (dia < 1 || dia > 31)) return erro("Dia entre 1 e 31.");
+      const data = /^\d{4}-\d{2}$/.test(mes) ? `${mes}-${String(dia || 1).padStart(2, "0")}` : null;
+      if (data && isNaN(new Date(data + "T12:00:00").getTime())) return erro("Data inválida.");
+      const b = f.querySelector("button[type=submit]"); b.disabled = true; m.className = "rowmsg"; m.textContent = "Salvando…";
+      try {
+        const { data: r, error } = await sb.from("eventos").update({ nome, data }).eq("id", e.id).select("id");
+        if (error) throw error;
+        if (!r || !r.length) throw new Error("nada foi salvo");
+        e.nome = nome; e.data = data ? fmtData(data) : "";
+        if (data && !mesesAbertos.has(mesDe(e))) { mesesAbertos.add(mesDe(e)); guardarMeses(); }
+        ordenarEventos(); renderFolders(); render();
+        const h = document.querySelector("#evhead .date"); if (h) h.insertAdjacentHTML("afterend", `<span class="rowmsg ok">Pasta renomeada.</span>`);
+      } catch (err) { b.disabled = false; erro(erroDb(err)); }
+    });
+  });
+}
+
 function render() {
   const main = document.getElementById("main");
   if (atual === "resumo") { renderResumo(); return; }
@@ -812,11 +852,14 @@ function render() {
     const e = EVENTOS.find(x => x.slug === atual);
     const lista = byEv(e.id);
     main.innerHTML = `
-      <div class="evhead"><span class="eyebrow">Pasta do evento</span><h2>${esc(e.nome)}</h2><span class="date">${e.data}</span></div>
+      <div class="evhead" id="evhead"><span class="eyebrow">Pasta do evento</span>
+        <div class="ev-tit"><h2>${esc(e.nome)}</h2>${LIVE ? `<button class="btn" type="button" id="evren">Renomear pasta</button>` : ""}</div>
+        <span class="date">${e.data || "sem data"}</span></div>
       ${kpis(lista)}
       <div id="stpanel">${statusResumo(lista)}</div>
       ${tabsHtml()}
       <div class="tabbody" id="tabbody"></div>`;
+    if (LIVE) wireRenomear(e);
   }
   main.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => {
     aba = b.dataset.aba; sel.clear();
