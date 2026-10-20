@@ -383,6 +383,17 @@ details.fo.achado { box-shadow: 0 0 0 3px var(--accent-soft); }
 .ag-mais > summary h3 { margin: 0; }
 @media (max-width: 760px) { .ag-row { grid-template-columns: 64px minmax(0, 1fr); } .ag-prod, .ag-chips, .ag-act { grid-column: 2; justify-items: start; } }
 
+/* Prazo do fornecedor */
+label.prz { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 0.72rem; color: var(--muted); flex-wrap: wrap; }
+label.prz input { font: inherit; font-size: 0.8rem; padding: 3px 6px; border: 1px dashed var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); }
+label.prz.has input { border-style: solid; color: var(--ink); font-weight: 600; }
+label.prz.soon input { border-color: var(--warn); color: var(--warn); }
+label.prz.late input { border-color: var(--bad); color: var(--bad); }
+.prz-st { font-size: 0.7rem; font-weight: 700; padding: 1px 6px; border-radius: 999px; }
+.prz-st.late { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); }
+.prz-st.soon { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.prz-ro { display: block; font-size: 0.78rem; color: var(--muted); }
+
 /* Renomear pasta no título */
 .ev-tit { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .ev-tit .btn { font-size: 0.8rem; padding: 4px 10px; }

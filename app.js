@@ -111,7 +111,7 @@ async function carregar() {
   const [evs, fos, its, pgs, sups, cus, peds, movs, cfgs, egs, ocs] = await Promise.all([
     todos("eventos", "id,nome,data,slug,ordem", ["ordem", "data", "nome"]),
     todos("formandos", "id,evento_id,nome", ["nome", "id"]),
-    todos("itens", "id,formando_id,pedido_id,ordem,produto,fornecedor_id,qtd,valor_unit,valor_total,categoria,brinde,obs,status,pedido_em,codigo_pedido,obs_cores,dtf_status,tag_status,tassel_status,solicitado_status,separado_status,adesivo_status,link_drive", ["formando_id", "ordem", "id"]),
+    todos("itens", "id,formando_id,pedido_id,ordem,produto,fornecedor_id,qtd,valor_unit,valor_total,categoria,brinde,obs,status,pedido_em,codigo_pedido,prazo,obs_cores,dtf_status,tag_status,tassel_status,solicitado_status,separado_status,adesivo_status,link_drive", ["formando_id", "ordem", "id"]),
     todos("pagamentos", "id,formando_id,ordem,descricao,valor,data,status,tipo,obs,recebedor", ["formando_id", "ordem", "id"]),
     todos("fornecedores", "id,nome", ["nome"]),
     todos("custos", "chave,produto,custo,venda", ["chave"]),
@@ -145,7 +145,7 @@ async function carregar() {
     const it = {
       id: r.id, fo: r.formando_id, produto: r.produto, fornId: r.fornecedor_id && SUP[r.fornecedor_id] ? r.fornecedor_id : null,
       qtd: +r.qtd || 0, vu: n(r.valor_unit), vt: n(r.valor_total), cat: CAT[r.categoria] ? r.categoria : "OUTROS",
-      brinde: !!r.brinde, obs: r.obs || "", status: r.status, pedido: r.pedido_em || "", codigo: r.codigo_pedido || "", cores: r.obs_cores || "", dtf: r.dtf_status || "", tag: r.tag_status || "", tassel: r.tassel_status || "", solicitado: r.solicitado_status || "", separado: r.separado_status || "", adesivo: r.adesivo_status || "", link: r.link_drive || "", novo: !!r.pedido_id,
+      brinde: !!r.brinde, obs: r.obs || "", status: r.status, pedido: r.pedido_em || "", codigo: r.codigo_pedido || "", prazo: r.prazo || "", cores: r.obs_cores || "", dtf: r.dtf_status || "", tag: r.tag_status || "", tassel: r.tassel_status || "", solicitado: r.solicitado_status || "", separado: r.separado_status || "", adesivo: r.adesivo_status || "", link: r.link_drive || "", novo: !!r.pedido_id,
     };
     ITEM[it.id] = it;
     (porFo[it.fo] = porFo[it.fo] || []).push(it);
@@ -246,7 +246,7 @@ const BARRAS = [
   { campo: "solicitado", rotulo: i => ehMarcador(i) ? "Nomes solicitados" : "Solicitado ao cliente", aria: "Já foi solicitado ao cliente", opcoes: i => temSolicitado(i) ? SOLICITADO_LOCAL : null },
 ];
 function novoEstado(it, campo, valor) {
-  const atual = { status: it.status, fornId: it.fornId, pedido: it.pedido || "", codigo: it.codigo || "", cores: it.cores || "", dtf: it.dtf || "", tag: it.tag || "", tassel: it.tassel || "", solicitado: it.solicitado || "", separado: it.separado || "", adesivo: it.adesivo || "", link: it.link || "" };
+  const atual = { status: it.status, fornId: it.fornId, pedido: it.pedido || "", codigo: it.codigo || "", prazo: it.prazo || "", cores: it.cores || "", dtf: it.dtf || "", tag: it.tag || "", tassel: it.tassel || "", solicitado: it.solicitado || "", separado: it.separado || "", adesivo: it.adesivo || "", link: it.link || "" };
   const barra = BARRAS.find(b => b.campo === campo);
   if (barra) { if (valor && !(barra.opcoes(it) || []).some(([k]) => k === valor)) return null; return { ...atual, [campo]: valor || "" }; }
   if (campo === "forn") { if (valor && !SUP[valor]) return null; return { ...atual, fornId: valor || null }; }
@@ -264,6 +264,7 @@ function novoEstado(it, campo, valor) {
     const status = v && it.status === "AGUARDANDO_PRODUCAO" ? "REPASSADO" : it.status;
     return { ...atual, status, codigo: v };
   }
+  if (campo === "prazo") { if (valor && !DATA_OK.test(valor)) return null; return { ...atual, prazo: valor || "" }; }
   if (campo === "cores") {
     const v = String(valor || "").trim().replace(/\s+/g, " ");
     if (v.length > 200) return null;
@@ -283,13 +284,13 @@ function linkOk(v) {
 }
 async function gravar(it, novo) {
   const { data, error } = await sb.from("itens").update({
-    status: novo.status, fornecedor_id: novo.fornId || null, pedido_em: novo.pedido || null, codigo_pedido: novo.codigo || null, obs_cores: novo.cores || null,
+    status: novo.status, fornecedor_id: novo.fornId || null, pedido_em: novo.pedido || null, codigo_pedido: novo.codigo || null, prazo: novo.prazo || null, obs_cores: novo.cores || null,
     dtf_status: novo.dtf || null, tag_status: novo.tag || null, tassel_status: novo.tassel || null, solicitado_status: novo.solicitado || null, separado_status: novo.separado || null, adesivo_status: novo.adesivo || null, link_drive: novo.link || null,
     atualizado_em: new Date().toISOString(), atualizado_por: USER ? USER.id : null,
   }).eq("id", it.id).select("id");
   if (error) throw error;
   if (!data || !data.length) throw new Error("nada foi salvo");
-  it.status = novo.status; it.fornId = novo.fornId || null; it.pedido = novo.pedido || ""; it.codigo = novo.codigo || ""; it.cores = novo.cores || "";
+  it.status = novo.status; it.fornId = novo.fornId || null; it.pedido = novo.pedido || ""; it.codigo = novo.codigo || ""; it.prazo = novo.prazo || ""; it.cores = novo.cores || "";
   it.dtf = novo.dtf || ""; it.tag = novo.tag || ""; it.tassel = novo.tassel || ""; it.solicitado = novo.solicitado || ""; it.separado = novo.separado || ""; it.adesivo = novo.adesivo || ""; it.link = novo.link || "";
 }
 
@@ -449,16 +450,29 @@ function localCell(i, flash) {
   }).join("");
 }
 
+// Itens que têm prazo combinado com o fornecedor
+const PRAZO_RE = /n?e?cessaire|mini hel|bolsa|sacola|chinel|rasteir|cartonad|gin ?box|\bbon[eé]|dad hat|avental|guardanapo|gloss|lip ?b|menu acr/i;
+const temPrazo = i => PRAZO_RE.test(i.produto || "");
+const prazoPassou = i => i.prazo && i.prazo < hojeISO() && i.status !== "PRONTO" && i.status !== "ENTREGUE";
+const prazoPerto = i => i.prazo && !prazoPassou(i) && i.status !== "PRONTO" && i.status !== "ENTREGUE" && diasAte(i.prazo) <= 3;
+function prazoTxt(i) {
+  if (!i.prazo) return "";
+  if (prazoPassou(i)) return `<span class="prz-st late">atrasado ${-diasAte(i.prazo)}d</span>`;
+  if (prazoPerto(i)) return `<span class="prz-st soon">${quando(diasAte(i.prazo))}</span>`;
+  return "";
+}
 function pedidoCell(i) {
-  const comCodigo = ehImperio(i.fornId) || i.codigo;
-  if (!LIVE) return (i.pedido ? `<span class="num">${fmtData(i.pedido)}</span>` : `<span class="forn-none">—</span>`) + (i.codigo ? `<span class="cod-ro">nº ${esc(i.codigo)}</span>` : "");
+  const comCodigo = ehImperio(i.fornId) || i.codigo, comPrazo = temPrazo(i) || i.prazo;
+  if (!LIVE) return (i.pedido ? `<span class="num">${fmtData(i.pedido)}</span>` : `<span class="forn-none">—</span>`) + (i.codigo ? `<span class="cod-ro">nº ${esc(i.codigo)}</span>` : "")
+    + (i.prazo ? `<span class="prz-ro">prazo ${fmtData(i.prazo)} ${prazoTxt(i)}</span>` : "");
   return `<input type="date" class="ed dt${i.pedido ? " has" : ""}" data-item="${esc(i.id)}" data-campo="pedido" value="${esc(i.pedido || "")}" aria-label="Data do pedido ao fornecedor de ${esc(i.produto)}">`
-    + (comCodigo ? `<input type="text" class="ed cod${i.codigo ? " has" : ""}" data-item="${esc(i.id)}" data-campo="codigo" value="${esc(i.codigo || "")}" maxlength="40" placeholder="nº pedido Império" aria-label="Código do pedido na Império de ${esc(i.produto)}">` : "");
+    + (comCodigo ? `<input type="text" class="ed cod${i.codigo ? " has" : ""}" data-item="${esc(i.id)}" data-campo="codigo" value="${esc(i.codigo || "")}" maxlength="40" placeholder="nº pedido Império" aria-label="Código do pedido na Império de ${esc(i.produto)}">` : "")
+    + (comPrazo ? `<label class="prz${i.prazo ? " has" : ""}${prazoPassou(i) ? " late" : prazoPerto(i) ? " soon" : ""}"><span>Prazo</span><input type="date" class="ed" data-item="${esc(i.id)}" data-campo="prazo" value="${esc(i.prazo || "")}" aria-label="Prazo do fornecedor para ${esc(i.produto)}">${prazoTxt(i)}</label>` : "");
 }
 // Mensagem de "salvo"/erro aparece embaixo do campo que foi alterado
 const flashEm = (flash, campo) => {
   if (!flash) return "";
-  const alvo = ["forn", "pedido", "codigo", "cores", "link", ...BARRAS.map(b => b.campo)].includes(flash[2]) ? flash[2] : "status";
+  const alvo = ["forn", "pedido", "codigo", "prazo", "cores", "link", ...BARRAS.map(b => b.campo)].includes(flash[2]) ? flash[2] : "status";
   return alvo === campo ? `<span class="rowmsg ${flash[0]}">${esc(flash[1])}</span>` : "";
 };
 // ID visual, taxa de papelaria e vetorização têm o link do Drive com a arte
@@ -484,7 +498,7 @@ function itemRow(i, flash) {
     <td class="r num">${int(i.qtd)}</td>
     <td class="r num">${i.vu == null ? "—" : brl(i.vu)}</td>
     <td>${fornCell(i)}${flashEm(flash, "forn")}</td>
-    <td>${pedidoCell(i)}${flashEm(flash, "pedido")}${flashEm(flash, "codigo")}</td>
+    <td>${pedidoCell(i)}${flashEm(flash, "pedido")}${flashEm(flash, "codigo")}${flashEm(flash, "prazo")}</td>
     <td>${statusCell(i)}${flashEm(flash, "status")}${localCell(i, flash)}</td>
     <td class="r num">${total}</td>
     <td class="obs">${obsCell(i, flash)}</td>
@@ -2175,7 +2189,7 @@ function prodRow(i, flash) {
     <td class="prod">${esc(i.produto)}</td>
     <td class="r num">${int(i.qtd)}</td>
     <td>${fornCell(i)}${flashEm(flash, "forn")}</td>
-    <td>${pedidoCell(i)}${flashEm(flash, "pedido")}${flashEm(flash, "codigo")}</td>
+    <td>${pedidoCell(i)}${flashEm(flash, "pedido")}${flashEm(flash, "codigo")}${flashEm(flash, "prazo")}</td>
     <td>${statusCell(i)}${flashEm(flash, "status")}${localCell(i, flash)}</td>
     <td class="obs">${obsCell(i, flash)}</td>
   </tr>`;
@@ -2192,6 +2206,7 @@ function renderProd() {
       <select id="pfo" aria-label="Filtrar por fornecedor"><option value="">Todos os fornecedores</option><option value="__escolher">Fornecedor a escolher</option>${fornOpts.map(([id, n]) => `<option value="${esc(id)}">${esc(n)}</option>`).join("")}</select>
       <select id="pcat" aria-label="Filtrar por categoria"><option value="__prod">Itens de produção</option><option value="">Todos os itens</option>${CAT_ORDER.map(c => `<option value="${c}">${CAT[c]}</option>`).join("")}</select>
       <select id="pped" aria-label="Filtrar por pedido ao fornecedor"><option value="">Pedido: todos</option><option value="sem">Sem pedido enviado</option><option value="com">Com pedido enviado</option></select>
+      <select id="pprz" aria-label="Filtrar por prazo"><option value="">Prazo: todos</option><option value="atrasado">Prazo vencido</option><option value="semana">Prazo nos próximos 7 dias</option><option value="sem">Sem prazo (itens com prazo)</option></select>
     </div>
     ${LIVE ? `<div class="bulk" id="bulk" data-n="0">
       <span><b id="nsel" class="num">0</b> selecionados</span>
@@ -2211,6 +2226,10 @@ function renderProd() {
       <label for="bcd">Nº pedido Império</label>
       <input type="text" id="bcd" maxlength="40" placeholder="ex.: 10773" style="width:110px">
       <button class="btn" type="button" id="bcdgo" disabled>Aplicar código</button>
+      <span class="sep" aria-hidden="true"></span>
+      <label for="bpz">Prazo do fornecedor</label>
+      <input type="date" id="bpz">
+      <button class="btn" type="button" id="bpzgo" disabled>Aplicar prazo</button>
       <button class="btn" type="button" id="bclr" disabled>Limpar seleção</button>
       <span class="res" id="bres" role="status"></span>
     </div>` : ""}
@@ -2220,7 +2239,7 @@ function renderProd() {
       <tbody id="prows"></tbody>
     </table></div>`;
 
-  const pq = document.getElementById("pq"), pst = document.getElementById("pst"), pfo = document.getElementById("pfo"), pcat = document.getElementById("pcat"), pped = document.getElementById("pped");
+  const pq = document.getElementById("pq"), pst = document.getElementById("pst"), pfo = document.getElementById("pfo"), pcat = document.getElementById("pcat"), pped = document.getElementById("pped"), pprz = document.getElementById("pprz");
   const body = document.getElementById("prows");
   let visiveis = [];
   const updBulk = () => {
@@ -2228,7 +2247,7 @@ function renderProd() {
     if (!b) return;
     b.dataset.n = String(sel.size);
     document.getElementById("nsel").textContent = sel.size;
-    ["bstgo", "bfogo", "bdtgo", "bcdgo", "bclr"].forEach(id => { document.getElementById(id).disabled = sel.size === 0; });
+    ["bstgo", "bfogo", "bdtgo", "bcdgo", "bpzgo", "bclr"].forEach(id => { document.getElementById(id).disabled = sel.size === 0; });
     const all = document.getElementById("ckall");
     if (all) { const n = visiveis.filter(i => sel.has(i.id)).length; all.checked = n > 0 && n === visiveis.length; all.indeterminate = n > 0 && n < visiveis.length; }
   };
@@ -2241,6 +2260,9 @@ function renderProd() {
       if (pst.value && i.status !== pst.value) return false;
       if (pped.value === "sem" && i.pedido) return false;
       if (pped.value === "com" && !i.pedido) return false;
+      if (pprz.value === "atrasado" && !prazoPassou(i)) return false;
+      if (pprz.value === "semana" && !(i.prazo && !prazoPassou(i) && i.status !== "PRONTO" && i.status !== "ENTREGUE" && diasAte(i.prazo) <= 7)) return false;
+      if (pprz.value === "sem" && !(temPrazo(i) && !i.prazo)) return false;
       if (pfo.value === "__escolher" && !i.escolher) return false;
       if (pfo.value && pfo.value !== "__escolher" && i.fornId !== pfo.value) return false;
       if (termo) {
@@ -2253,7 +2275,7 @@ function renderProd() {
     body.innerHTML = visiveis.length ? visiveis.map(i => prodRow(i)).join("") : `<tr><td colspan="8" class="muted">Nenhum item com esses filtros.</td></tr>`;
     updBulk();
   };
-  [pq, pst, pfo, pcat, pped].forEach(el => el.addEventListener(el === pq ? "input" : "change", draw));
+  [pq, pst, pfo, pcat, pped, pprz].forEach(el => el.addEventListener(el === pq ? "input" : "change", draw));
 
   body.addEventListener("change", ev => {
     const ck = ev.target.closest("input[data-ck]");
@@ -2279,7 +2301,7 @@ function renderProd() {
     const aplicar = async (campo, valor, rotulo) => {
       const res = document.getElementById("bres");
       const ids = [...sel];
-      ["bstgo", "bfogo", "bdtgo", "bcdgo", "bclr"].forEach(id => { document.getElementById(id).disabled = true; });
+      ["bstgo", "bfogo", "bdtgo", "bcdgo", "bpzgo", "bclr"].forEach(id => { document.getElementById(id).disabled = true; });
       res.className = "res"; res.textContent = `Salvando ${ids.length} itens…`;
       const r = await salvarLote(ids, campo, valor, (n, tot) => { res.textContent = `Salvando ${n} de ${tot}…`; });
       if (r.ok) { sel.clear(); res.className = "res ok"; res.textContent = `${r.n} ${r.n === 1 ? "item atualizado" : "itens atualizados"}: ${rotulo}.`; }
@@ -2295,6 +2317,13 @@ function renderProd() {
       if (fora.length === sel.size) { res.className = "res err"; res.textContent = "Nenhum item selecionado é da Império. Escolha a Império como fornecedor primeiro."; return; }
       fora.forEach(id => sel.delete(id));
       aplicar("codigo", v, (v ? `código do pedido ${v}` : "código do pedido apagado") + (fora.length ? ` (${fora.length} de outro fornecedor ficaram de fora)` : ""));
+    });
+    document.getElementById("bpzgo").addEventListener("click", () => {
+      const v = document.getElementById("bpz").value, res = document.getElementById("bres");
+      const fora = [...sel].filter(id => ITEM[id] && !temPrazo(ITEM[id]) && !ITEM[id].prazo);
+      if (fora.length === sel.size) { res.className = "res err"; res.textContent = "Nenhum item selecionado tem prazo de fornecedor (necessaire, bolsa, sacola, chinela, caixa cartonada, gin box, boné, avental, guardanapo, gloss, menu de acrílico)."; return; }
+      fora.forEach(id => sel.delete(id));
+      aplicar("prazo", v, (v ? `prazo ${fmtData(v)}` : "prazo apagado") + (fora.length ? ` (${fora.length} sem prazo de fornecedor ficaram de fora)` : ""));
     });
   }
   draw();
