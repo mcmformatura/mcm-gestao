@@ -2461,12 +2461,7 @@ async function abrirPainel(session) {
   abrindo = true;
   try {
     USER = session.user;
-    let { data, error } = await sb.from("membros").select("email").limit(1);
-    // Conta criada pelo cadastro e confirmada pelo e-mail: usa o código da equipe digitado no cadastro
-    if ((error || !data || !data.length) && codigoGuardado()) {
-      const r = await liberarComCodigo(codigoGuardado());
-      if (r.ok) ({ data, error } = await sb.from("membros").select("email").limit(1));
-    }
+    const { data, error } = await sb.from("membros").select("email").limit(1);
     if (error || !data || !data.length) {
       document.getElementById("saEmail").textContent = USER.email || "";
       mostrarAuth("semacesso");
@@ -2531,13 +2526,9 @@ document.getElementById("fEntrar").addEventListener("submit", async e => {
 });
 
 // Cadastro com o código da equipe: a conta já entra liberada, sem precisar de administrador
-const K_CODIGO = "mcm-codigo-equipe";
-const codigoGuardado = () => { try { return localStorage.getItem(K_CODIGO) || ""; } catch (e) { return ""; } };
-const guardarCodigo = c => { try { if (c) localStorage.setItem(K_CODIGO, c); else localStorage.removeItem(K_CODIGO); } catch (e) {} };
 async function liberarComCodigo(codigo) {
   const { data, error } = await sb.rpc("entrar_na_equipe", { p_codigo: codigo });
   if (error) return { ok: false, msg: /muitas tentativas/i.test(error.message || "") ? "Muitas tentativas com código errado. Espere uma hora e tente de novo." : erroAuth(error) };
-  guardarCodigo("");
   return data === true ? { ok: true } : { ok: false, msg: "Código da equipe incorreto. Confira com a administração." };
 }
 document.getElementById("fCadastro").addEventListener("submit", async e => {
@@ -2551,24 +2542,24 @@ document.getElementById("fCadastro").addEventListener("submit", async e => {
   if (prob) return avisar(f, prob, "err");
   if (codigo.length < 4) return avisar(f, "Digite o código da equipe.", "err");
   ocupado(f, true, "Criando a conta…");
-  const { data, error } = await sb.auth.signUp({ email, password: s1, options: { emailRedirectTo: location.origin + "/" } });
-  if (error) { ocupado(f, false); return avisar(f, erroAuth(error), "err"); }
-  ["caSenha", "caSenha2"].forEach(id => { document.getElementById(id).value = ""; });
-  // O Supabase não diz que o e-mail já existe (por segurança): devolve um usuário sem identidades
-  if (data.user && Array.isArray(data.user.identities) && !data.user.identities.length) {
+  // O servidor confere o código e cria a conta já confirmada (sem e-mail de confirmação) e já liberada
+  let r;
+  try {
+    const resp = await fetch(`${CONFIG.supabaseUrl}/functions/v1/cadastrar-equipe`, {
+      method: "POST", headers: { "Content-Type": "application/json", apikey: CONFIG.supabaseKey },
+      body: JSON.stringify({ email, senha: s1, codigo }),
+    });
+    r = await resp.json().catch(() => ({ erro: "Resposta inesperada do servidor." }));
+  } catch (err) { r = { erro: "Sem conexão com o servidor. Confira a internet e tente de novo." }; }
+  if (!r.ok) {
     ocupado(f, false);
-    document.getElementById("enEmail").value = email;
-    return mostrarAuth("entrar", "Esse e-mail já tem conta. Entre com a sua senha (ou use “Esqueci minha senha”).", "info");
+    if (r.jaTemConta) { document.getElementById("enEmail").value = email; return mostrarAuth("entrar", r.erro, "info"); }
+    return avisar(f, r.erro || "Não deu certo. Tente de novo.", "err");
   }
-  if (!data.session) {   // falta confirmar o e-mail: o código fica guardado e é usado no primeiro login
-    guardarCodigo(codigo);
-    ocupado(f, false);
-    document.getElementById("enEmail").value = email;
-    return mostrarAuth("entrar", `Conta criada! Abra o e-mail de confirmação enviado para ${email} (confira o spam) e clique no link. Depois é só entrar.`, "ok");
-  }
-  const r = await liberarComCodigo(codigo);
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: s1 });
   ocupado(f, false);
-  if (!r.ok) { document.getElementById("saEmail").textContent = email; return mostrarAuth("semacesso", r.msg, "err"); }
+  ["caSenha", "caSenha2", "caCodigo"].forEach(id => { document.getElementById(id).value = ""; });
+  if (error) { document.getElementById("enEmail").value = email; return mostrarAuth("entrar", "Conta criada! Entre com o seu e-mail e senha.", "ok"); }
   abrirPainel(data.session);
 });
 document.getElementById("fSemAcesso").addEventListener("submit", async e => {

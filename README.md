@@ -33,7 +33,7 @@ As alterações nas planilhas de orçamento chegam ao site sozinhas: um script d
 1. **Entrar**: e-mail e senha.
 2. **Esqueci minha senha**: envia um e-mail de recuperação.
 3. **Criar nova senha**: pelo link do e-mail ou digitando o código que veio nele.
-4. **Criar conta** (link direto: `/cadastro`): e-mail, senha e o **código da equipe**. Com o código certo a conta entra como membro na hora, sem administrador (depois de confirmar o e-mail). Quem já tem conta sem acesso também pode digitar o código na tela "Acesso não liberado". O banco guarda só o resumo do código (tabela `codigo_equipe`) e barra 5 tentativas erradas por hora; para trocar o código, veja `supabase/021_cadastro_codigo_equipe.sql`.
+4. **Criar conta** (link direto: `/cadastro`): e-mail, senha e o **código da equipe**. Com o código certo a conta entra como membro na hora, sem administrador (sem e-mail de confirmação: a função `cadastrar-equipe` confere o código e cria a conta já confirmada). Quem já tem conta sem acesso também pode digitar o código na tela "Acesso não liberado". O banco guarda só o resumo do código (tabela `codigo_equipe`) e barra tentativas erradas (10 por hora por endereço no cadastro, 5 por hora por conta na tela de acesso); para trocar o código, veja `supabase/021_cadastro_codigo_equipe.sql`.
 
 ## Rodar no computador
 
@@ -57,7 +57,7 @@ Depois abra http://localhost:5173.
 
 ## Publicar
 
-1. No Supabase: rodar os arquivos de `supabase/` em ordem (`001_estrutura.sql`, `002_administradores.sql`, `003_estoque.sql`, `004_pagamentos_recebedor.sql`, `005_codigo_pedido.sql`, `006_obs_cores.sql`, `007_obs_categorias.sql`, `008_dtf_tag.sql`, `009_dtf_costureiro.sql`, `010_tassel.sql`, `011_solicitado_cliente.sql`, `012_separado_loja.sql`, `013_adesivo.sql`, `014_link_drive.sql`, `015_itens_excluidos.sql`, `016_lixeira_sem_rpc.sql`, `017_prazo.sql`, `018_integracao_planilhas.sql`, `019_planilhas_ativa.sql`, `020_tempo_real.sql`, `021_cadastro_codigo_equipe.sql`), importar os dados e cadastrar os e-mails da equipe em `membros`.
+1. No Supabase: rodar os arquivos de `supabase/` em ordem (`001_estrutura.sql`, `002_administradores.sql`, `003_estoque.sql`, `004_pagamentos_recebedor.sql`, `005_codigo_pedido.sql`, `006_obs_cores.sql`, `007_obs_categorias.sql`, `008_dtf_tag.sql`, `009_dtf_costureiro.sql`, `010_tassel.sql`, `011_solicitado_cliente.sql`, `012_separado_loja.sql`, `013_adesivo.sql`, `014_link_drive.sql`, `015_itens_excluidos.sql`, `016_lixeira_sem_rpc.sql`, `017_prazo.sql`, `018_integracao_planilhas.sql`, `019_planilhas_ativa.sql`, `020_tempo_real.sql`, `021_cadastro_codigo_equipe.sql`, `022_cadastro_sem_email.sql`), importar os dados e cadastrar os e-mails da equipe em `membros`.
 2. Na Vercel: **Add New → Project → Import** deste repositório. Framework Preset: **Other**. O `vercel.json` já define o build e a pasta `dist`. Cadastre as variáveis de ambiente antes do primeiro deploy.
 3. No Supabase, em Authentication → URL Configuration: colocar o endereço da Vercel em **Site URL** e em **Redirect URLs**, para o link de recuperação voltar ao site.
 4. Em Authentication → Email Templates → Reset Password: incluir `{{ .Token }}` para o e-mail trazer também o código.
