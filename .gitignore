@@ -1,6 +1,5 @@
-# Dados reais de clientes e senhas de teste: ficam só no computador, nunca no GitHub
+# Cópias de dados de clientes: ficam só no computador, nunca no GitHub
 dados-locais.json
-usuarios-locais.json
 *.sql.local
 seed.sql
 

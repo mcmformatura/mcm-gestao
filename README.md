@@ -33,26 +33,15 @@ As alterações nas planilhas de orçamento chegam ao site sozinhas: um script d
 2. **Esqueci minha senha**: envia um e-mail de recuperação.
 3. **Criar nova senha**: pelo link do e-mail ou digitando o código que veio nele.
 
-## Rodar no computador (modo local)
+## Rodar no computador
 
-Em `localhost` o site entra em **modo local**: imita o Supabase dentro do navegador, sem internet. Os e-mails de recuperação aparecem numa "caixa de entrada de teste" na própria tela.
-
-O modo local precisa de dois arquivos que **não vão para o GitHub** porque têm dados reais de clientes e senhas de teste:
-
-- `dados-locais.json`: cópia dos eventos, formandos, itens e pagamentos;
-- `usuarios-locais.json`: usuários de teste, no formato
-  `{ "usuarios": [ { "email": "voce@exemplo.com", "senha": "uma-senha-de-teste", "membro": true } ] }`
-
-Para iniciar no Windows:
+No computador o site usa o mesmo Supabase do site no ar: entra com o mesmo e-mail e senha, e toda mudança vale de verdade. Precisa do arquivo `.env` (veja abaixo). Para iniciar no Windows:
 
 ```
 powershell -NoProfile -ExecutionPolicy Bypass -File servir.ps1
 ```
 
-Depois abra http://localhost:5173. Opções no endereço:
-
-- `?reset` volta os dados de teste ao original;
-- `?supabase` usa o Supabase de verdade mesmo em localhost.
+Depois abra http://localhost:5173.
 
 ## Variáveis de ambiente
 

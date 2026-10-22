@@ -7,8 +7,7 @@ function semConfig() {
   document.getElementById("boot").innerHTML = "<div><b>Configuração ausente.</b> Defina SUPABASE_URL e SUPABASE_PUBLISHABLE_KEY (arquivo .env ou variáveis de ambiente da Vercel) e publique de novo.</div>";
   throw new Error("MCM_CONFIG ausente");
 }
-const sb = window.MCM_LOCAL ? window.MCM_LOCAL.client
-  : (CONFIG.supabaseUrl && CONFIG.supabaseKey) ? supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey, {
+const sb = (CONFIG.supabaseUrl && CONFIG.supabaseKey) ? supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit" },
     })
   : semConfig();
@@ -178,9 +177,7 @@ function setConn(state, html) {
 }
 function connMsg() {
   if (!LIVE) return;
-  const txt = window.MCM_LOCAL
-    ? `<b>Modo local.</b> As mudanças ficam salvas só neste navegador, para testes.`
-    : `<b>Conectado ao banco.</b> Cada mudança fica salva na hora para toda a equipe.`;
+  const txt = `<b>Conectado ao banco.</b> Cada mudança fica salva na hora para toda a equipe.`;
   setConn("live", `${txt} <button class="btn" type="button" id="recarregar">Atualizar dados</button>`);
   document.getElementById("recarregar").addEventListener("click", recarregar);
 }
