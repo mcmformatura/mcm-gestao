@@ -175,9 +175,9 @@ function setConn(state, html) {
   c.dataset.state = state;
   document.getElementById("connMsg").innerHTML = html;
 }
-function connMsg() {
+function connMsg(extra = "") {
   if (!LIVE) return;
-  const txt = `<b>Conectado ao banco.</b> Cada mudança fica salva na hora para toda a equipe.`;
+  const txt = `<b>Conectado ao banco.</b> Cada mudança fica salva na hora para toda a equipe.${extra}`;
   setConn("live", `${txt} <button class="btn" type="button" id="recarregar">Atualizar dados</button>`);
   document.getElementById("recarregar").addEventListener("click", recarregar);
 }
@@ -185,6 +185,40 @@ async function recarregar() {
   setConn("loading", "Atualizando os dados…");
   try { await carregar(); LIVE = true; preencherMeses(); connMsg(); renderFolders(); render(); }
   catch (e) { setConn("error", `<b>Não atualizou.</b> ${esc(erroDb(e))}. <button class="btn" type="button" id="recarregar">Tentar de novo</button>`); document.getElementById("recarregar").addEventListener("click", recarregar); }
+}
+
+// Tempo real: mudança no banco (vinda da planilha do Google ou de outra pessoa no site) atualiza a tela sozinha
+const TABELAS_AO_VIVO = ["eventos", "formandos", "itens", "pagamentos", "obs_categorias"];
+let canalAoVivo = null, timerAoVivo = null;
+function ligarTempoReal() {
+  if (canalAoVivo) return;
+  canalAoVivo = sb.channel("mcm-mudancas");
+  TABELAS_AO_VIVO.forEach(t => canalAoVivo.on("postgres_changes", { event: "*", schema: "public", table: t }, agendarAtualizacao));
+  canalAoVivo.subscribe();
+}
+function desligarTempoReal() {
+  clearTimeout(timerAoVivo);
+  if (canalAoVivo) { sb.removeChannel(canalAoVivo); canalAoVivo = null; }
+}
+// Uma aba da planilha muda várias linhas de uma vez: espera a chegada parar antes de atualizar
+function agendarAtualizacao() {
+  if (!LIVE) return;
+  clearTimeout(timerAoVivo);
+  timerAoVivo = setTimeout(atualizarSozinho, 2500);
+}
+// Não atualiza no meio de uma digitação (perderia o que está sendo escrito) nem com a aba do navegador escondida
+const digitando = () => { const a = document.activeElement; return !!a && (a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && !/^(checkbox|radio|button|submit)$/.test(a.type))); };
+async function atualizarSozinho() {
+  if (!LIVE || abrindo) return;
+  if (digitando() || document.hidden) { timerAoVivo = setTimeout(atualizarSozinho, 3000); return; }
+  const y = window.scrollY;
+  try {
+    await carregar();
+    preencherMeses(); renderFolders(); render();
+    window.scrollTo(0, y);
+    const h = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    connMsg(` <span class="muted">Atualizado sozinho às ${h}.</span>`);
+  } catch (e) { /* tenta de novo na próxima mudança */ }
 }
 function erroDb(e) {
   const m = String((e && (e.message || e.error_description || e.msg)) || "");
@@ -2442,6 +2476,7 @@ async function abrirPainel(session) {
     { const ev = EVENTOS.find(e => e.slug === atual); if (ev) mesesAbertos.add(mesDe(ev)); }
     preencherMeses();
     connMsg(); renderFolders(); render();
+    ligarTempoReal();
   } catch (e) {
     LIVE = false;
     setConn("error", `<b>Não carregou.</b> ${esc(erroDb(e))}. <button class="btn" type="button" id="recarregar">Tentar de novo</button>`);
@@ -2465,6 +2500,7 @@ elAuth.addEventListener("click", e => {
 });
 document.querySelectorAll("[data-sair]").forEach(b => b.addEventListener("click", async () => {
   b.disabled = true;
+  desligarTempoReal();
   await sb.auth.signOut();
   b.disabled = false;
   LIVE = false; USER = null;

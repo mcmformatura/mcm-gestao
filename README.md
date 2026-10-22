@@ -11,6 +11,7 @@ Painel da MCM Formatura para acompanhar eventos, formandos, itens de produção,
 ## Pastas do painel
 
 - **Novo pedido**: lança itens por setor (papelaria, lembranças, copos, doces, montagem).
+- **Atualiza sozinho**: quando a planilha do Google ou outra pessoa muda algo, a tela se atualiza em poucos segundos (sem F5; espera terminar de digitar).
 - **Próximas entregas** (página inicial): turmas pela data de entrega, com atrasadas, próximos 7 e 30 dias, produção pronta, fornecedor a escolher e saldo a receber; botão para dar baixa de entrega na turma inteira.
 - **Busca rápida** no topo (atalho /): acha cliente ou turma e abre direto a ficha.
 - **Renomear pasta**: dentro de cada pasta de turma, o botão "Renomear pasta" ao lado do título muda nome, mês e dia (o link da pasta continua o mesmo).
@@ -55,7 +56,7 @@ Depois abra http://localhost:5173.
 
 ## Publicar
 
-1. No Supabase: rodar os arquivos de `supabase/` em ordem (`001_estrutura.sql`, `002_administradores.sql`, `003_estoque.sql`, `004_pagamentos_recebedor.sql`, `005_codigo_pedido.sql`, `006_obs_cores.sql`, `007_obs_categorias.sql`, `008_dtf_tag.sql`, `009_dtf_costureiro.sql`, `010_tassel.sql`, `011_solicitado_cliente.sql`, `012_separado_loja.sql`, `013_adesivo.sql`, `014_link_drive.sql`, `015_itens_excluidos.sql`, `016_lixeira_sem_rpc.sql`, `017_prazo.sql`, `018_integracao_planilhas.sql`, `019_planilhas_ativa.sql`), importar os dados e cadastrar os e-mails da equipe em `membros`.
+1. No Supabase: rodar os arquivos de `supabase/` em ordem (`001_estrutura.sql`, `002_administradores.sql`, `003_estoque.sql`, `004_pagamentos_recebedor.sql`, `005_codigo_pedido.sql`, `006_obs_cores.sql`, `007_obs_categorias.sql`, `008_dtf_tag.sql`, `009_dtf_costureiro.sql`, `010_tassel.sql`, `011_solicitado_cliente.sql`, `012_separado_loja.sql`, `013_adesivo.sql`, `014_link_drive.sql`, `015_itens_excluidos.sql`, `016_lixeira_sem_rpc.sql`, `017_prazo.sql`, `018_integracao_planilhas.sql`, `019_planilhas_ativa.sql`, `020_tempo_real.sql`), importar os dados e cadastrar os e-mails da equipe em `membros`.
 2. Na Vercel: **Add New → Project → Import** deste repositório. Framework Preset: **Other**. O `vercel.json` já define o build e a pasta `dist`. Cadastre as variáveis de ambiente antes do primeiro deploy.
 3. No Supabase, em Authentication → URL Configuration: colocar o endereço da Vercel em **Site URL** e em **Redirect URLs**, para o link de recuperação voltar ao site.
 4. Em Authentication → Email Templates → Reset Password: incluir `{{ .Token }}` para o e-mail trazer também o código.
