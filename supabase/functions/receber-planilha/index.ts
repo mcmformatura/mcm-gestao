@@ -147,9 +147,9 @@ function fornecedor(produto: string, cat: string): string | null {
 // ---------- Cliente e turma para abas novas ----------
 function nomeDaAba(t: string) {
   const n = t.replace(/\(\s*or[cç]amento\s*\)/gi, " ")
-    .replace(/\b\d{1,2}\s*[./]\s*\d{1,2}(\s*[./]\s*\d{2,4})?\b/g, " ")
+    .replace(/\b\d{1,2}\s*[./]\s*\d{1,2}(\s*[./]\s*\d{2,4})?(?!\d)/g, " ")
     .replace(/\b(ENVIO|ENVIAR|RETIRADA|RET|OK|MONT\.?|MONTAGEM|ENTREGA DE ITENS|C\/C|CC)\b/gi, " ")
-    .replace(/[-–]+/g, " ").replace(/\s+/g, " ").trim();
+    .replace(/\(\s*\)/g, " ").replace(/[-–]+/g, " ").replace(/\s+/g, " ").trim();
   return n || t.trim();
 }
 async function turmaParaAbaNova(planilhaId: string, titulo: string): Promise<string> {
@@ -160,9 +160,8 @@ async function turmaParaAbaNova(planilhaId: string, titulo: string): Promise<str
     const mesmos = (evs || []).filter(e => +e.data.slice(5, 7) === mes && +e.data.slice(8, 10) === dia);
     if (mesmos.length === 1) return mesmos[0].id;
   }
-  const { data: pl } = await sb.from("planilhas").select("evento_padrao_id").eq("id", planilhaId).maybeSingle();
-  if (pl?.evento_padrao_id) return pl.evento_padrao_id;
-  if (m) {
+  // data no nome da aba e nenhuma turma nesse dia: cria "Entregas DD/MM"; sem data: turma padrão da planilha
+  if (m && +m[2] >= 1 && +m[2] <= 12) {
     const dia = +m[1], mes = +m[2], hoje = new Date();
     // ano em que a data fica mais perto de hoje
     const anos = [hoje.getFullYear() - 1, hoje.getFullYear(), hoje.getFullYear() + 1];
@@ -174,6 +173,8 @@ async function turmaParaAbaNova(planilhaId: string, titulo: string): Promise<str
     await sb.from("eventos").insert({ id, nome: `Entregas ${dd}`, data, slug: `entregas-${dd.replace("/", "")}-${String(y).slice(2)}`, ordem: 100 });
     return id;
   }
+  const { data: pl } = await sb.from("planilhas").select("evento_padrao_id").eq("id", planilhaId).maybeSingle();
+  if (pl?.evento_padrao_id) return pl.evento_padrao_id;
   const id = "ev_planilhas";
   const { data: existe } = await sb.from("eventos").select("id").eq("id", id).maybeSingle();
   if (!existe) await sb.from("eventos").insert({ id, nome: "Novos das planilhas (sem data)", data: null, slug: "novos-das-planilhas", ordem: 999 });
@@ -181,7 +182,7 @@ async function turmaParaAbaNova(planilhaId: string, titulo: string): Promise<str
 }
 
 // ---------- Comparação com o que já está no sistema ----------
-const mesmoNum = (a: unknown, b: unknown) => (a == null && b == null) || (a != null && b != null && Math.abs(+a - +b) < 0.005);
+const mesmoNum = (a: unknown, b: unknown) => (a == null && b == null) || (a != null && b != null && Math.abs(+a - +b) < 0.006);   // o banco guarda 2 casas (598,185 vira 598,19), mas 1 centavo de diferença ainda conta
 async function sincronizarCliente(fo: string, itens: Item[], pags: Pag[], simular = false) {
   const { data: atuais, error } = await sb.from("itens").select("id,ordem,produto,qtd,valor_unit,valor_total,categoria,brinde,obs").eq("formando_id", fo).is("pedido_id", null).order("ordem");
   if (error) throw error;
@@ -228,13 +229,15 @@ Deno.serve(async req => {
   const { data: ok } = await sb.from("integracao_tokens").select("token_hash").eq("token_hash", await sha256(token)).maybeSingle();
   if (!ok) return resposta({ erro: "senha da integração inválida" }, 401);
   if (corpo.acao === "lista") {                              // planilhas que o script do Google deve acompanhar
-    const { data } = await sb.from("planilhas").select("id,titulo,atualizado_em").order("atualizado_em", { ascending: false });
+    const { data } = await sb.from("planilhas").select("id,titulo,atualizado_em,ativa").order("atualizado_em", { ascending: false });
     return resposta({ ok: true, planilhas: data || [] });
   }
   if (!planilha_id || !aba || typeof aba.gid !== "number" || !Array.isArray(aba.linhas)) return resposta({ erro: "dados da aba incompletos" }, 400);
   if (aba.linhas.length > 2000) return resposta({ erro: "aba grande demais" }, 400);
 
   const titulo = String(aba.titulo || "").replace(/\s+/g, " ").trim();
+  const { data: pl0 } = await sb.from("planilhas").select("ativa").eq("id", planilha_id).maybeSingle();
+  if (pl0 && pl0.ativa === false) return resposta({ ok: true, ignorada: true, aba: titulo });   // planilha antiga, fora do site
   if (!simular) await sb.from("planilhas").upsert({ id: planilha_id, titulo: planilha_titulo || null, atualizado_em: new Date().toISOString() }, { onConflict: "id", ignoreDuplicates: false });
   const { data: mapa } = await sb.from("planilha_abas").select("bloco,formando_id,ignorar").eq("planilha_id", planilha_id).eq("aba_gid", aba.gid).order("bloco");
   if ((mapa || []).some(m => m.bloco === 0 && m.ignorar)) return resposta({ ok: true, ignorada: true, aba: titulo });
