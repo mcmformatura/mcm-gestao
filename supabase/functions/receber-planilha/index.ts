@@ -81,13 +81,13 @@ function lerBloco(rows: { n: number; h: Record<string, string> }[]) {
     const a = h.A; if (!a) continue;
     const up = a.toUpperCase();
     const secao = SECOES.find(([re]) => re.test(up));
-    if (/^\s*(SUBTOTAL|SUB TOTAL|SUBSTOTAL)/.test(up) || (/^\s*TOTAL/.test(up) && secao && !/GERAL/.test(up))) {
+    if (/^\s*(SUBTOTAL|SUB TOTAL|SUBSTOTAL|SUTOTAL)/.test(up) || (/^\s*TOTAL/.test(up) && secao && !/GERAL/.test(up))) {
       const sec = secao ? secao[1] : null;
       pend.forEach(it => { const g = adivinhar(it.produto); it.cat = !sec ? g : (sec === "COPOS" && g === "PAPELARIA") ? g : sec; });
       pend = []; continue;
     }
     if (/RESTANTE|^\s*RESTA/.test(up)) continue;
-    if (/^\s*TOTAL/.test(up)) {
+    if (/^\s*(TOTAL|GERAL)\b/.test(up)) {                        // "TOTAL GERAL", "TOTAL" ou só "GERAL"
       const v = toNum(h.D);
       if (/DESC|AP[OÓ]S|%/.test(up)) {
         if (totalPlan && v && v < totalPlan) pags.push({ tipo: "DESCONTO", descricao: a, valor: Math.round((totalPlan - v) * 100) / 100, data: null, status: "PAGO", obs: "" });
