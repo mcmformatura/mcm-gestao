@@ -502,7 +502,19 @@ button.link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
       <div class="field"><label for="enSenha">Senha</label><input id="enSenha" type="password" autocomplete="current-password" required></div>
       <p class="auth-msg" role="status"></p>
       <button class="btn primary" type="submit">Entrar</button>
-      <div class="auth-links"><button class="link" type="button" data-ir="esqueci">Esqueci minha senha</button></div>
+      <div class="auth-links"><button class="link" type="button" data-ir="esqueci">Esqueci minha senha</button><button class="link" type="button" data-ir="cadastro">Criar conta</button></div>
+    </form>
+
+    <form class="auth-form" id="fCadastro" data-view="cadastro" novalidate hidden>
+      <h2>Criar conta</h2>
+      <p class="hint">Para a equipe da MCM. Use o código da equipe que a administração passou: com ele o acesso já fica liberado.</p>
+      <div class="field"><label for="caEmail">E-mail</label><input id="caEmail" type="email" autocomplete="username" inputmode="email" required></div>
+      <div class="field"><label for="caSenha">Senha</label><input id="caSenha" type="password" autocomplete="new-password" minlength="8" required></div>
+      <div class="field"><label for="caSenha2">Repita a senha</label><input id="caSenha2" type="password" autocomplete="new-password" minlength="8" required></div>
+      <div class="field"><label for="caCodigo">Código da equipe</label><input id="caCodigo" class="code-in" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="MCM-…" required></div>
+      <p class="auth-msg" role="status"></p>
+      <button class="btn primary" type="submit">Criar conta e entrar</button>
+      <div class="auth-links"><button class="link" type="button" data-ir="entrar">Já tenho conta</button></div>
     </form>
 
     <form class="auth-form" id="fEsqueci" data-view="esqueci" novalidate hidden>
@@ -538,11 +550,14 @@ button.link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
       <button class="btn primary" type="submit">Salvar nova senha e entrar</button>
     </form>
 
-    <div class="auth-form" data-view="semacesso" hidden>
+    <form class="auth-form" id="fSemAcesso" data-view="semacesso" novalidate hidden>
       <h2>Acesso não liberado</h2>
-      <p class="hint">Você entrou como <b id="saEmail"></b>, mas esse e-mail ainda não tem permissão para ver o painel. Peça para a administração da MCM liberar o seu acesso.</p>
-      <button class="btn" type="button" data-sair>Sair</button>
-    </div>
+      <p class="hint">Você entrou como <b id="saEmail"></b>, mas esse e-mail ainda não tem permissão para ver o painel. Digite o código da equipe para liberar na hora.</p>
+      <div class="field"><label for="saCodigo">Código da equipe</label><input id="saCodigo" class="code-in" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="MCM-…" required></div>
+      <p class="auth-msg" role="status"></p>
+      <button class="btn primary" type="submit">Liberar meu acesso</button>
+      <div class="auth-links"><button class="link" type="button" data-sair>Sair</button></div>
+    </form>
   </div>
 </div>
 

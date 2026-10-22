@@ -2440,6 +2440,8 @@ function erroAuth(e) {
   const m = String((e && e.message) || "");
   const s = e && e.status;
   if (/invalid login credentials/i.test(m)) return "E-mail ou senha incorretos.";
+  if (/already registered|already exists/i.test(m)) return "Esse e-mail já tem conta. Entre com a sua senha.";
+  if (/signups? not allowed|signup.*disabled/i.test(m)) return "O cadastro de contas novas está desligado no Supabase.";
   if (/email not confirmed/i.test(m)) return "Este e-mail ainda não foi confirmado. Abra o e-mail de confirmação que a conta recebeu.";
   if (/token has expired|invalid.*(otp|token)|otp.*(expired|invalid)/i.test(m)) return "Código inválido ou vencido. Peça um e-mail novo e use o código mais recente.";
   if (s === 429 || /rate limit|too many|security purposes/i.test(m)) return "Muitas tentativas seguidas. Espere alguns minutos e tente de novo.";
@@ -2459,7 +2461,12 @@ async function abrirPainel(session) {
   abrindo = true;
   try {
     USER = session.user;
-    const { data, error } = await sb.from("membros").select("email").limit(1);
+    let { data, error } = await sb.from("membros").select("email").limit(1);
+    // Conta criada pelo cadastro e confirmada pelo e-mail: usa o código da equipe digitado no cadastro
+    if ((error || !data || !data.length) && codigoGuardado()) {
+      const r = await liberarComCodigo(codigoGuardado());
+      if (r.ok) ({ data, error } = await sb.from("membros").select("email").limit(1));
+    }
     if (error || !data || !data.length) {
       document.getElementById("saEmail").textContent = USER.email || "";
       mostrarAuth("semacesso");
@@ -2492,7 +2499,8 @@ elAuth.addEventListener("click", e => {
   const ir = e.target.closest("[data-ir]");
   if (!ir) return;
   const view = ir.dataset.ir;
-  const email = (document.getElementById("enEmail").value || document.getElementById("esEmail").value || document.getElementById("coEmail").value).trim();
+  const email = (document.getElementById("enEmail").value || document.getElementById("esEmail").value || document.getElementById("coEmail").value || document.getElementById("caEmail").value).trim();
+  if (view === "cadastro") document.getElementById("caEmail").value = email;
   if (view === "esqueci") document.getElementById("esEmail").value = email;
   if (view === "codigo") document.getElementById("coEmail").value = email;
   if (view === "entrar") document.getElementById("enEmail").value = email;
@@ -2519,6 +2527,61 @@ document.getElementById("fEntrar").addEventListener("submit", async e => {
   ocupado(f, false);
   if (error) return avisar(f, erroAuth(error), "err");
   document.getElementById("enSenha").value = "";
+  abrirPainel(data.session);
+});
+
+// Cadastro com o código da equipe: a conta já entra liberada, sem precisar de administrador
+const K_CODIGO = "mcm-codigo-equipe";
+const codigoGuardado = () => { try { return localStorage.getItem(K_CODIGO) || ""; } catch (e) { return ""; } };
+const guardarCodigo = c => { try { if (c) localStorage.setItem(K_CODIGO, c); else localStorage.removeItem(K_CODIGO); } catch (e) {} };
+async function liberarComCodigo(codigo) {
+  const { data, error } = await sb.rpc("entrar_na_equipe", { p_codigo: codigo });
+  if (error) return { ok: false, msg: /muitas tentativas/i.test(error.message || "") ? "Muitas tentativas com código errado. Espere uma hora e tente de novo." : erroAuth(error) };
+  guardarCodigo("");
+  return data === true ? { ok: true } : { ok: false, msg: "Código da equipe incorreto. Confira com a administração." };
+}
+document.getElementById("fCadastro").addEventListener("submit", async e => {
+  e.preventDefault();
+  const f = e.currentTarget;
+  const email = document.getElementById("caEmail").value.trim();
+  const s1 = document.getElementById("caSenha").value, s2 = document.getElementById("caSenha2").value;
+  const codigo = document.getElementById("caCodigo").value.trim().toUpperCase();
+  if (!emailOk(email)) return avisar(f, "Digite um e-mail válido.", "err");
+  const prob = conferirSenhas(s1, s2);
+  if (prob) return avisar(f, prob, "err");
+  if (codigo.length < 4) return avisar(f, "Digite o código da equipe.", "err");
+  ocupado(f, true, "Criando a conta…");
+  const { data, error } = await sb.auth.signUp({ email, password: s1, options: { emailRedirectTo: location.origin + "/" } });
+  if (error) { ocupado(f, false); return avisar(f, erroAuth(error), "err"); }
+  ["caSenha", "caSenha2"].forEach(id => { document.getElementById(id).value = ""; });
+  // O Supabase não diz que o e-mail já existe (por segurança): devolve um usuário sem identidades
+  if (data.user && Array.isArray(data.user.identities) && !data.user.identities.length) {
+    ocupado(f, false);
+    document.getElementById("enEmail").value = email;
+    return mostrarAuth("entrar", "Esse e-mail já tem conta. Entre com a sua senha (ou use “Esqueci minha senha”).", "info");
+  }
+  if (!data.session) {   // falta confirmar o e-mail: o código fica guardado e é usado no primeiro login
+    guardarCodigo(codigo);
+    ocupado(f, false);
+    document.getElementById("enEmail").value = email;
+    return mostrarAuth("entrar", `Conta criada! Abra o e-mail de confirmação enviado para ${email} (confira o spam) e clique no link. Depois é só entrar.`, "ok");
+  }
+  const r = await liberarComCodigo(codigo);
+  ocupado(f, false);
+  if (!r.ok) { document.getElementById("saEmail").textContent = email; return mostrarAuth("semacesso", r.msg, "err"); }
+  abrirPainel(data.session);
+});
+document.getElementById("fSemAcesso").addEventListener("submit", async e => {
+  e.preventDefault();
+  const f = e.currentTarget;
+  const codigo = document.getElementById("saCodigo").value.trim().toUpperCase();
+  if (codigo.length < 4) return avisar(f, "Digite o código da equipe.", "err");
+  ocupado(f, true, "Conferindo…");
+  const r = await liberarComCodigo(codigo);
+  ocupado(f, false);
+  if (!r.ok) return avisar(f, r.msg, "err");
+  document.getElementById("saCodigo").value = "";
+  const { data } = await sb.auth.getSession();
   abrirPainel(data.session);
 });
 
@@ -2591,5 +2654,5 @@ sb.auth.onAuthStateChange((evento) => {
   const { data } = await sb.auth.getSession();
   if (recuperando) { if (data.session) mostrarAuth("nova"); return; }
   if (data.session) abrirPainel(data.session);
-  else mostrarAuth("entrar");
+  else mostrarAuth(/^#cadastro$/.test(HASH_INICIAL) || /\/cadastro\/?$/.test(location.pathname) ? "cadastro" : "entrar");
 })();
